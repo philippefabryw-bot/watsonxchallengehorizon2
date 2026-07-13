@@ -41,6 +41,4 @@ flowchart TD
 3. Run `npm run dev`
 4. Run `npm run build`
 
-## Notes
 
-The current environment did not have `node`, `npm`, or `git` available, so the project files were created directly but dependency installation, build validation, and git commit/push could not be completed from this session.
