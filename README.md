@@ -18,6 +18,22 @@ Use a CSV with these headers:
 
 You can paste CSV directly into the app or upload a `.csv` file.
 
+## Architecture diagram
+
+```mermaid
+flowchart TD
+    A[IBM software catalog CSV] --> B[React UI]
+    B --> C[Catalog parser]
+    C --> D[Portfolio analysis engine]
+    D --> E[License modernization recommendations]
+    D --> F[Catalog refresh recommendations]
+    D --> G[New use cases from market trends]
+    H[Embedded market signal library] --> D
+    E --> I[Advisor dashboard]
+    F --> I
+    G --> I
+```
+
 ## Local development
 
 1. Install Node.js and npm.
