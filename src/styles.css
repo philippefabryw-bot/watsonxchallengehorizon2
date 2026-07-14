@@ -230,6 +230,24 @@ textarea {
   color: #fca5a5;
 }
 
+.target-date-input {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.target-date-input input {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+}
+
+.phase-section {
+  border-color: rgba(96, 165, 250, 0.24);
+}
+
 .card-header,
 .price-row {
   display: flex;
@@ -295,6 +313,25 @@ textarea {
   border: 1px dashed rgba(148, 163, 184, 0.24);
   color: #94a3b8;
   background: rgba(15, 23, 42, 0.42);
+}
+
+.priority-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.priority-table th,
+.priority-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  vertical-align: top;
+}
+
+.priority-table th {
+  color: #93c5fd;
+  font-weight: 700;
 }
 
 .trend-list {

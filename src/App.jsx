@@ -297,6 +297,59 @@ const analyzeCatalog = (products) => {
     return acc;
   }, {});
 
+  // Phase 1: Knowledge base summary
+  const knowledgeBase = {
+    totalSolutions: products.length,
+    categories,
+    topMarketSignals: marketSignals.slice(0, 3).map((s) => s.theme),
+  };
+
+  // Phase 2: Executive presentation - What / Why / How / Why Now
+  const executivePresentations = [...new Set(products.map((p) => p.productFamily))]
+    .slice(0, 5)
+    .map((family) => {
+      const familyProducts = products.filter((p) => p.productFamily === family);
+      const category = familyProducts[0]?.category ?? 'Other';
+      const signal = marketSignals.find((s) => s.keywords.some((kw) => family.toLowerCase().includes(kw)));
+      return {
+        product: family,
+        what: `${family} provides ${familyProducts.length} licensed capabilities for ${category.toLowerCase()}.`,
+        why: signal
+          ? signal.summary
+          : 'Supports operational efficiency and digital transformation objectives.',
+        how: `Deploy via existing entitlements. Integration with current environment requires architecture review and deployment planning with ATL/CSE support.`,
+        whyNow: signal
+          ? `Current market demand is ${signal.demand.toLowerCase()} for ${signal.theme.toLowerCase()}. Acting now aligns deployment with strategic priorities and renewal cycles.`
+          : 'Current entitlement represents sunk cost with unrealized value. Immediate deployment maximizes ROI before renewal.',
+      };
+    });
+
+  // Phase 3: Deployment value prioritization
+  const deploymentPriorities = products
+    .map((p) => ({
+      product: p.productFamily,
+      category: p.category,
+      consumptionRate: p.consumptionRate ?? 0,
+      price2029: p.price2029 ?? 0,
+      licenseModel: p.licenseModel,
+    }))
+    .sort((a, b) => b.consumptionRate - a.consumptionRate)
+    .slice(0, 10);
+
+  // Phase 4: Business plan for sales leaders
+  const salesPlan = {
+    priorityOpportunities: deploymentPriorities.slice(0, 3).map((p) => p.product),
+    renewalImpact: `${priceIncreaseAlerts.length} line items with price increases present proactive renewal opportunity.`,
+    executiveStrategy: 'Leverage What/Why/How/Why Now presentation framework for C-level engagement.',
+  };
+
+  // Phase 5: Technical plan for ATLs/CSEs
+  const technicalPlan = {
+    deploymentSequence: deploymentPriorities.slice(0, 3).map((p, i) => `${i + 1}. ${p.product} (${p.category})`),
+    prerequisites: 'Architecture review, environment readiness assessment, integration mapping.',
+    risks: 'License compliance, integration complexity, user adoption readiness.',
+  };
+
   return {
     licenseRecommendations,
     useCaseRecommendations,
@@ -307,7 +360,43 @@ const analyzeCatalog = (products) => {
       licenseModelBreakdown,
       totalConsumptionRate: products.reduce((s, p) => s + (p.consumptionRate ?? 0), 0),
     },
+    knowledgeBase,
+    executivePresentations,
+    deploymentPriorities,
+    salesPlan,
+    technicalPlan,
   };
+};
+
+// ---------------------------------------------------------------------------
+// Workback plan generator
+// ---------------------------------------------------------------------------
+const generateWorkbackPlan = (targetDate) => {
+  const target = new Date(targetDate);
+  const now = new Date();
+  const weeksToTarget = Math.ceil((target - now) / (7 * 24 * 60 * 60 * 1000));
+
+  if (weeksToTarget < 12) {
+    return [{ milestone: 'Insufficient lead time', week: 0, owner: 'N/A' }];
+  }
+
+  const plan = [
+    { milestone: 'Opportunity identification', week: weeksToTarget - 12, owner: 'Tech Sales Leader' },
+    { milestone: 'Discovery workshop', week: weeksToTarget - 11, owner: 'ATL / CSE' },
+    { milestone: 'Business value assessment', week: weeksToTarget - 10, owner: 'Tech Sales Leader' },
+    { milestone: 'Solution demonstration', week: weeksToTarget - 9, owner: 'CSE' },
+    { milestone: 'POC kickoff and success criteria', week: weeksToTarget - 8, owner: 'CSE / Client' },
+    { milestone: 'Solution architecture finalized', week: weeksToTarget - 7, owner: 'ATL' },
+    { milestone: 'Economic alignment and funding', week: weeksToTarget - 6, owner: 'Tech Sales Leader' },
+    { milestone: 'Executive sponsorship secured', week: weeksToTarget - 5, owner: 'Tech Sales Leader' },
+    { milestone: 'Business approval received', week: weeksToTarget - 4, owner: 'Client Sponsor' },
+    { milestone: 'Deployment planning complete', week: weeksToTarget - 3, owner: 'ATL / CSE' },
+    { milestone: 'Implementation begins', week: weeksToTarget - 2, owner: 'CSE / Client IT' },
+    { milestone: 'User adoption and enablement', week: weeksToTarget - 1, owner: 'CSE / Client' },
+    { milestone: 'Production deployment', week: weeksToTarget, owner: 'Client IT' },
+  ];
+
+  return plan;
 };
 
 // ---------------------------------------------------------------------------
@@ -317,8 +406,10 @@ function App() {
   const [products, setProducts] = useState(SAMPLE_ENTRIES);
   const [fileName, setFileName] = useState('Built-in sample (30 entries from ibm-license-catalog.xlsx)');
   const [parseError, setParseError] = useState(null);
+  const [targetDate, setTargetDate] = useState('2025-12-31');
 
   const analysis = useMemo(() => analyzeCatalog(products), [products]);
+  const workbackPlan = useMemo(() => generateWorkbackPlan(targetDate), [targetDate]);
 
   const onFileUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -349,12 +440,10 @@ function App() {
     <div className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">IBM Software Portfolio Advisor</p>
-          <h1>Catalog modernization recommendations</h1>
+          <p className="eyebrow">IBM Software Portfolio Advisor — Powered by watsonx</p>
+          <h1>Client-specific account planning and deployment acceleration</h1>
           <p className="hero-copy">
-            Upload <strong>ibm-license-catalog.xlsx</strong> (or any IBM ACP catalog XLSX) to get license
-            modernization recommendations, market-aligned use case suggestions, and price change alerts — all
-            derived directly from the real part numbers and pricing data.
+            Upload <strong>ibm-license-catalog.xlsx</strong> (or any IBM ACP catalog XLSX) to generate client knowledge base, executive presentations, deployment value analysis, sales &amp; technical plans, and workback timelines — all aligned to IBM's account planning methodology.
           </p>
           <p className="file-badge">{fileName}</p>
         </div>
@@ -366,11 +455,120 @@ function App() {
             <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onFileUpload} />
           </label>
           {parseError && <p className="parse-error">{parseError}</p>}
+          <div className="target-date-input">
+            <label>Target deployment date</label>
+            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+          </div>
         </div>
       </header>
 
       <main className="layout">
-        {/* Portfolio snapshot */}
+        {/* Phase 1: Knowledge base summary */}
+        <section className="panel summary-panel full-width phase-section">
+          <div className="section-heading">
+            <h2>Phase 1: Client-specific knowledge base</h2>
+          </div>
+          <p>Total solutions in catalog: <strong>{analysis.knowledgeBase.totalSolutions}</strong></p>
+          <p>Solution categories: <strong>{analysis.knowledgeBase.categories.join(', ')}</strong></p>
+          <p>Top market signals: <strong>{analysis.knowledgeBase.topMarketSignals.join(', ')}</strong></p>
+        </section>
+
+        {/* Phase 2: Executive presentations */}
+        <section className="panel recommendations-panel full-width phase-section">
+          <div className="section-heading">
+            <h2>Phase 2: Executive client presentations (What / Why / How / Why Now)</h2>
+            <span>{analysis.executivePresentations.length} products</span>
+          </div>
+          {analysis.executivePresentations.map((item, i) => (
+            <article className="recommendation-card" key={`exec-${i}`}>
+              <h3>{item.product}</h3>
+              <p><strong>What:</strong> {item.what}</p>
+              <p><strong>Why:</strong> {item.why}</p>
+              <p><strong>How:</strong> {item.how}</p>
+              <p><strong>Why Now:</strong> {item.whyNow}</p>
+            </article>
+          ))}
+        </section>
+
+        {/* Phase 3: Deployment value prioritization */}
+        <section className="panel recommendations-panel full-width phase-section">
+          <div className="section-heading">
+            <h2>Phase 3: Deployment value prioritization</h2>
+            <span>Top {analysis.deploymentPriorities.length} by consumption rate</span>
+          </div>
+          <table className="priority-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>License Model</th>
+                <th>Consumption Rate</th>
+                <th>2029 NTE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.deploymentPriorities.map((item, i) => (
+                <tr key={`pri-${i}`}>
+                  <td>{item.product}</td>
+                  <td>{item.category}</td>
+                  <td>{item.licenseModel}</td>
+                  <td>{fmt(item.consumptionRate)}</td>
+                  <td>{fmt(item.price2029)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        {/* Phase 4: Sales & technical plans */}
+        <section className="panel recommendations-panel phase-section">
+          <div className="section-heading">
+            <h2>Phase 4a: Business plan for technology sales leaders</h2>
+          </div>
+          <p><strong>Priority opportunities:</strong> {analysis.salesPlan.priorityOpportunities.join(', ')}</p>
+          <p><strong>Renewal impact:</strong> {analysis.salesPlan.renewalImpact}</p>
+          <p><strong>Executive strategy:</strong> {analysis.salesPlan.executiveStrategy}</p>
+        </section>
+
+        <section className="panel recommendations-panel phase-section">
+          <div className="section-heading">
+            <h2>Phase 4b: Technical plan for ATLs and CSEs</h2>
+          </div>
+          <p><strong>Recommended deployment sequence:</strong></p>
+          <ul>
+            {analysis.technicalPlan.deploymentSequence.map((s, i) => <li key={i}>{s}</li>)}
+          </ul>
+          <p><strong>Prerequisites:</strong> {analysis.technicalPlan.prerequisites}</p>
+          <p><strong>Risks:</strong> {analysis.technicalPlan.risks}</p>
+        </section>
+
+        {/* Phase 5: Workback plan */}
+        <section className="panel recommendations-panel full-width phase-section">
+          <div className="section-heading">
+            <h2>Phase 5: Workback plan to target deployment ({targetDate})</h2>
+            <span>{workbackPlan.length} milestones</span>
+          </div>
+          <table className="priority-table">
+            <thead>
+              <tr>
+                <th>Week</th>
+                <th>Milestone</th>
+                <th>Owner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workbackPlan.map((item, i) => (
+                <tr key={`wb-${i}`}>
+                  <td>W{item.week}</td>
+                  <td>{item.milestone}</td>
+                  <td>{item.owner}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        {/* Original analysis sections collapsed below */}
         <section className="panel summary-panel full-width">
           <div className="section-heading">
             <h2>Portfolio snapshot</h2>
@@ -424,7 +622,7 @@ function App() {
           {analysis.licenseRecommendations.length === 0 ? (
             <p className="empty-state">No license modernization patterns detected.</p>
           ) : (
-            analysis.licenseRecommendations.map((item, i) => (
+            analysis.licenseRecommendations.slice(0, 5).map((item, i) => (
               <article className="recommendation-card" key={`lic-${i}`}>
                 <div className="card-header">
                   <h3>{item.product}</h3>
@@ -452,7 +650,7 @@ function App() {
           {analysis.useCaseRecommendations.length === 0 ? (
             <p className="empty-state">No market-aligned use cases matched.</p>
           ) : (
-            analysis.useCaseRecommendations.map((item, i) => (
+            analysis.useCaseRecommendations.slice(0, 5).map((item, i) => (
               <article className="recommendation-card" key={`uc-${i}`}>
                 <div className="card-header">
                   <h3>{item.product}</h3>
@@ -478,7 +676,7 @@ function App() {
           {analysis.priceIncreaseAlerts.length === 0 ? (
             <p className="empty-state">No items with &gt;5% price increase detected.</p>
           ) : (
-            analysis.priceIncreaseAlerts.map((item, i) => (
+            analysis.priceIncreaseAlerts.slice(0, 5).map((item, i) => (
               <article className="recommendation-card" key={`pa-${i}`}>
                 <div className="card-header">
                   <h3>{item.product}</h3>
