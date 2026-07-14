@@ -1,0 +1,65 @@
+{
+  "source": "../ibm-license-catalog.xlsx.xlsx",
+  "contentHash": "d7fd53df3e76cbc4",
+  "sheets": [
+    {
+      "name": "Table 1 ACP (Cad)",
+      "file": "Table_1_ACP__Cad_.json",
+      "rowCount": 2413,
+      "headers": [
+        "S&S part number",
+        "License part number",
+        "Description",
+        "Royalty",
+        "Consumption rate (CAD)",
+        "ACP S&S Unit Reference Price for NTE for 2029 (CAD)",
+        "ACP S&S Unit Reference Price for NTE for 2030 (CAD)"
+      ]
+    },
+    {
+      "name": "Table 2 PA S&S (Cad)",
+      "file": "Table_2_PA_S_S__Cad_.json",
+      "rowCount": 86,
+      "headers": [
+        "Coverage period",
+        "Coverage period"
+      ]
+    },
+    {
+      "name": "Table 3 zOTC S&S (Cad)",
+      "file": "Table_3_zOTC_S_S__Cad_.json",
+      "rowCount": 365,
+      "headers": [
+        "Coverage period",
+        "Coverage period"
+      ]
+    },
+    {
+      "name": "Table 4 PA S&S (USA)",
+      "file": "Table_4_PA_S_S__USA_.json",
+      "rowCount": 111,
+      "headers": [
+        "Coverage period",
+        "Coverage period"
+      ]
+    },
+    {
+      "name": "Table 5 PA S&S (Swe)",
+      "file": "Table_5_PA_S_S__Swe_.json",
+      "rowCount": 8,
+      "headers": [
+        "Coverage period",
+        "Coverage period"
+      ]
+    },
+    {
+      "name": "Table 6 zOTC S&S (Swe)",
+      "file": "Table_6_zOTC_S_S__Swe_.json",
+      "rowCount": 57,
+      "headers": [
+        "Coverage period",
+        "Coverage period"
+      ]
+    }
+  ]
+}

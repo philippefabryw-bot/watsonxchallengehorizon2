@@ -120,6 +120,10 @@ textarea {
   grid-column: span 2;
 }
 
+.full-width {
+  grid-column: span 2;
+}
+
 .recommendations-panel,
 .trends-panel,
 .summary-panel {
@@ -152,7 +156,7 @@ textarea {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -216,6 +220,61 @@ textarea {
   font-weight: 700;
 }
 
+.file-badge,
+.parse-error {
+  margin: 12px 0 0;
+  color: #cbd5e1;
+}
+
+.parse-error {
+  color: #fca5a5;
+}
+
+.card-header,
+.price-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.badge-demand-high {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(74, 222, 128, 0.25);
+  color: #bbf7d0;
+}
+
+.badge-demand-medium {
+  background: rgba(250, 204, 21, 0.14);
+  border-color: rgba(253, 224, 71, 0.25);
+  color: #fde68a;
+}
+
+.badge-alert {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(248, 113, 113, 0.25);
+  color: #fecaca;
+}
+
+.price-row {
+  margin: 12px 0;
+  color: #cbd5e1;
+  font-size: 0.92rem;
+}
+
 .recommendation-card p,
 .recommendation-card small,
 .trend-card p,
@@ -262,7 +321,8 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .input-panel {
+  .input-panel,
+  .full-width {
     grid-column: auto;
   }
 
