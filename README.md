@@ -74,6 +74,24 @@ flowchart TD
 3. Run [`npm run dev`](package.json)
 4. Run [`npm run build`](package.json)
 
+## Docker
+
+Build the image:
+
+```powershell
+docker build -t ibm-catalog-modernization-advisor .
+```
+
+Run the container:
+
+```powershell
+docker run --rm -p 8080:80 ibm-catalog-modernization-advisor
+```
+
+Then open `http://localhost:8080`.
+
+The container build is defined in [`Dockerfile`](Dockerfile) and serves the production build with nginx.
+
 ## Dependencies
 
 The app depends on [`xlsx`](package.json) to parse IBM catalog workbooks in the browser.
