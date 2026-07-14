@@ -322,6 +322,77 @@ textarea {
   margin-bottom: 16px;
 }
 
+.matrix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.matrix-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  border: 1px solid transparent;
+}
+
+.matrix-chip-priority-1 {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(74, 222, 128, 0.25);
+  color: #bbf7d0;
+}
+
+.matrix-chip-priority-2 {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(96, 165, 250, 0.25);
+  color: #bfdbfe;
+}
+
+.matrix-chip-priority-3 {
+  background: rgba(250, 204, 21, 0.16);
+  border-color: rgba(253, 224, 71, 0.25);
+  color: #fde68a;
+}
+
+.matrix-chip-priority-4 {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.25);
+  color: #fecaca;
+}
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.matrix-card {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.matrix-card-selected {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.matrix-card.priority-1 {
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.matrix-card.priority-2 {
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.matrix-card.priority-3 {
+  background: rgba(250, 204, 21, 0.14);
+}
+
+.matrix-card.priority-4 {
+  background: rgba(239, 68, 68, 0.14);
+}
+
 .use-case-option {
   display: grid;
   gap: 6px;

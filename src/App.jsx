@@ -336,6 +336,30 @@ const analyzeCatalog = (products) => {
     .sort((a, b) => b.consumptionRate - a.consumptionRate)
     .slice(0, 10);
 
+  const effortValueMatrix = useCaseRecommendations
+    .slice(0, 8)
+    .map((item) => {
+      const priority = deploymentPriorities.find((entry) => entry.product === item.product);
+      const valueScore = Math.min(100, Math.round(((priority?.consumptionRate ?? 0) / 150000) * 100) || (item.demand === 'High' ? 70 : 45));
+      const effortBase = priority?.licenseModel === 'PVU / VPC' ? 75 : priority?.licenseModel === 'Authorized User' || priority?.licenseModel === 'Floating User' ? 45 : 60;
+      const effortScore = Math.min(100, effortBase + (priority?.category === 'Security' || priority?.category === 'Integration' ? 10 : 0));
+      const priorityBand =
+        valueScore >= 65 && effortScore <= 50
+          ? 'priority-1'
+          : valueScore >= 65
+            ? 'priority-2'
+            : effortScore <= 50
+              ? 'priority-3'
+              : 'priority-4';
+
+      return {
+        ...item,
+        valueScore,
+        effortScore,
+        priorityBand,
+      };
+    });
+
 
   return {
     licenseRecommendations,
@@ -350,6 +374,7 @@ const analyzeCatalog = (products) => {
     knowledgeBase,
     executivePresentations,
     deploymentPriorities,
+    effortValueMatrix,
   };
 };
 
@@ -595,6 +620,25 @@ function App() {
           <div className="section-heading">
             <h2>Phase 4: Deployment value prioritization</h2>
             <span>Top {analysis.deploymentPriorities.length} by consumption rate</span>
+          </div>
+          <div className="matrix-legend">
+            <span className="matrix-chip matrix-chip-priority-1">Priority 1: high value / low effort</span>
+            <span className="matrix-chip matrix-chip-priority-2">Priority 2: high value / higher effort</span>
+            <span className="matrix-chip matrix-chip-priority-3">Priority 3: moderate value / low effort</span>
+            <span className="matrix-chip matrix-chip-priority-4">Priority 4: lower priority</span>
+          </div>
+          <div className="matrix-grid">
+            {analysis.effortValueMatrix.map((item, index) => (
+              <article
+                key={`matrix-${item.product}-${index}`}
+                className={`matrix-card ${item.priorityBand}${selectedUseCase?.product === item.product && selectedUseCase?.title === item.title ? ' matrix-card-selected' : ''}`}
+              >
+                <h3>{item.product}</h3>
+                <p>{item.title}</p>
+                <p><strong>Value:</strong> {item.valueScore}/100</p>
+                <p><strong>Effort:</strong> {item.effortScore}/100</p>
+              </article>
+            ))}
           </div>
           <table className="priority-table">
             <thead>
