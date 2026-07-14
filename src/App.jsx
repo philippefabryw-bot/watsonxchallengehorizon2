@@ -336,19 +336,6 @@ const analyzeCatalog = (products) => {
     .sort((a, b) => b.consumptionRate - a.consumptionRate)
     .slice(0, 10);
 
-  // Phase 4: Business plan for sales leaders
-  const salesPlan = {
-    priorityOpportunities: deploymentPriorities.slice(0, 3).map((p) => p.product),
-    renewalImpact: `${priceIncreaseAlerts.length} line items with price increases present proactive renewal opportunity.`,
-    executiveStrategy: 'Leverage What/Why/How/Why Now presentation framework for C-level engagement.',
-  };
-
-  // Phase 5: Technical plan for ATLs/CSEs
-  const technicalPlan = {
-    deploymentSequence: deploymentPriorities.slice(0, 3).map((p, i) => `${i + 1}. ${p.product} (${p.category})`),
-    prerequisites: 'Architecture review, environment readiness assessment, integration mapping.',
-    risks: 'License compliance, integration complexity, user adoption readiness.',
-  };
 
   return {
     licenseRecommendations,
@@ -363,37 +350,42 @@ const analyzeCatalog = (products) => {
     knowledgeBase,
     executivePresentations,
     deploymentPriorities,
-    salesPlan,
-    technicalPlan,
   };
 };
 
 // ---------------------------------------------------------------------------
 // Workback plan generator
 // ---------------------------------------------------------------------------
-const generateWorkbackPlan = (targetDate) => {
+const generateWorkbackPlan = (targetDate, selectedUseCase) => {
   const target = new Date(targetDate);
   const now = new Date();
   const weeksToTarget = Math.ceil((target - now) / (7 * 24 * 60 * 60 * 1000));
+
+  if (!selectedUseCase) {
+    return [{ milestone: 'Select a suggested use case to generate a tailored workback plan', week: 0, owner: 'User' }];
+  }
 
   if (weeksToTarget < 12) {
     return [{ milestone: 'Insufficient lead time', week: 0, owner: 'N/A' }];
   }
 
+  const useCaseTheme = selectedUseCase.title;
+  const product = selectedUseCase.product;
+
   const plan = [
-    { milestone: 'Opportunity identification', week: weeksToTarget - 12, owner: 'Tech Sales Leader' },
-    { milestone: 'Discovery workshop', week: weeksToTarget - 11, owner: 'ATL / CSE' },
-    { milestone: 'Business value assessment', week: weeksToTarget - 10, owner: 'Tech Sales Leader' },
-    { milestone: 'Solution demonstration', week: weeksToTarget - 9, owner: 'CSE' },
-    { milestone: 'POC kickoff and success criteria', week: weeksToTarget - 8, owner: 'CSE / Client' },
-    { milestone: 'Solution architecture finalized', week: weeksToTarget - 7, owner: 'ATL' },
-    { milestone: 'Economic alignment and funding', week: weeksToTarget - 6, owner: 'Tech Sales Leader' },
-    { milestone: 'Executive sponsorship secured', week: weeksToTarget - 5, owner: 'Tech Sales Leader' },
-    { milestone: 'Business approval received', week: weeksToTarget - 4, owner: 'Client Sponsor' },
-    { milestone: 'Deployment planning complete', week: weeksToTarget - 3, owner: 'ATL / CSE' },
-    { milestone: 'Implementation begins', week: weeksToTarget - 2, owner: 'CSE / Client IT' },
-    { milestone: 'User adoption and enablement', week: weeksToTarget - 1, owner: 'CSE / Client' },
-    { milestone: 'Production deployment', week: weeksToTarget, owner: 'Client IT' },
+    { milestone: `Confirm ${useCaseTheme.toLowerCase()} deployment opportunity for ${product}`, week: weeksToTarget - 12, owner: 'Tech Sales Leader' },
+    { milestone: `Discovery workshop for ${product} and target use case`, week: weeksToTarget - 11, owner: 'ATL / CSE' },
+    { milestone: `Business value assessment for ${useCaseTheme.toLowerCase()}`, week: weeksToTarget - 10, owner: 'Tech Sales Leader' },
+    { milestone: `Solution demonstration mapped to ${useCaseTheme.toLowerCase()}`, week: weeksToTarget - 9, owner: 'CSE' },
+    { milestone: `POC kickoff and success criteria for ${product}`, week: weeksToTarget - 8, owner: 'CSE / Client' },
+    { milestone: `Architecture and integration design for ${product}`, week: weeksToTarget - 7, owner: 'ATL' },
+    { milestone: `Economic alignment and funding approval for ${product}`, week: weeksToTarget - 6, owner: 'Tech Sales Leader' },
+    { milestone: `Executive sponsorship secured for ${useCaseTheme.toLowerCase()}`, week: weeksToTarget - 5, owner: 'Tech Sales Leader' },
+    { milestone: `Business approval received for ${product}`, week: weeksToTarget - 4, owner: 'Client Sponsor' },
+    { milestone: `Deployment planning complete for ${product}`, week: weeksToTarget - 3, owner: 'ATL / CSE' },
+    { milestone: `Implementation begins for ${product}`, week: weeksToTarget - 2, owner: 'CSE / Client IT' },
+    { milestone: `User adoption and enablement for ${product}`, week: weeksToTarget - 1, owner: 'CSE / Client' },
+    { milestone: `Production deployment for ${product}`, week: weeksToTarget, owner: 'Client IT' },
   ];
 
   return plan;
@@ -407,9 +399,56 @@ function App() {
   const [fileName, setFileName] = useState('Built-in sample (30 entries from ibm-license-catalog.xlsx)');
   const [parseError, setParseError] = useState(null);
   const [targetDate, setTargetDate] = useState('2025-12-31');
+  const [selectedUseCaseIndex, setSelectedUseCaseIndex] = useState(0);
 
   const analysis = useMemo(() => analyzeCatalog(products), [products]);
-  const workbackPlan = useMemo(() => generateWorkbackPlan(targetDate), [targetDate]);
+  const selectedUseCase = analysis.useCaseRecommendations[selectedUseCaseIndex] ?? null;
+  const selectedProductPriority =
+    analysis.deploymentPriorities.find((item) => item.product === selectedUseCase?.product) ?? null;
+  const salesPlan = useMemo(() => {
+    if (!selectedUseCase) {
+      return {
+        priorityOpportunity: 'Select a use case',
+        renewalImpact: 'Select a use case to assess renewal and revenue impact.',
+        executiveStrategy: 'Use the selected use case to shape the executive conversation.',
+        expectedOutcome: 'No use case selected.',
+      };
+    }
+
+    return {
+      priorityOpportunity: `${selectedUseCase.product} — ${selectedUseCase.title}`,
+      renewalImpact: `${selectedUseCase.product} supports ${selectedUseCase.title.toLowerCase()} and should be positioned before renewal events to improve realized value and reduce exposure to future price uplift.`,
+      executiveStrategy: `Lead with ${selectedUseCase.title.toLowerCase()} as the board-level business priority, then map owned IBM entitlements to near-term deployment outcomes.`,
+      expectedOutcome: `Increase deployment adoption of ${selectedUseCase.product} and convert owned entitlement into measurable business value.`,
+    };
+  }, [selectedUseCase]);
+  const technicalPlan = useMemo(() => {
+    if (!selectedUseCase) {
+      return {
+        deploymentSequence: ['Select a use case to generate a technical plan'],
+        prerequisites: 'No use case selected.',
+        risks: 'No use case selected.',
+        architecture: 'No use case selected.',
+      };
+    }
+
+    return {
+      deploymentSequence: [
+        `1. Validate target architecture for ${selectedUseCase.product}`,
+        `2. Confirm integration points required for ${selectedUseCase.title.toLowerCase()}`,
+        `3. Launch pilot and success measurement for ${selectedUseCase.product}`,
+      ],
+      prerequisites: `Architecture review, entitlement validation, and environment readiness for ${selectedUseCase.product}.`,
+      risks: `Integration complexity, deployment capacity, and adoption readiness for ${selectedUseCase.title.toLowerCase()}.`,
+      architecture: selectedProductPriority
+        ? `${selectedProductPriority.category} architecture with ${selectedProductPriority.licenseModel} deployment constraints and implementation planning.`
+        : `Reference architecture should be defined for ${selectedUseCase.product}.`,
+    };
+  }, [selectedUseCase, selectedProductPriority]);
+  const workbackPlan = useMemo(
+    () => generateWorkbackPlan(targetDate, selectedUseCase),
+    [targetDate, selectedUseCase],
+  );
 
   const onFileUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -525,9 +564,10 @@ function App() {
           <div className="section-heading">
             <h2>Phase 4a: Business plan for technology sales leaders</h2>
           </div>
-          <p><strong>Priority opportunities:</strong> {analysis.salesPlan.priorityOpportunities.join(', ')}</p>
-          <p><strong>Renewal impact:</strong> {analysis.salesPlan.renewalImpact}</p>
-          <p><strong>Executive strategy:</strong> {analysis.salesPlan.executiveStrategy}</p>
+          <p><strong>Priority opportunity:</strong> {salesPlan.priorityOpportunity}</p>
+          <p><strong>Expected outcome:</strong> {salesPlan.expectedOutcome}</p>
+          <p><strong>Renewal impact:</strong> {salesPlan.renewalImpact}</p>
+          <p><strong>Executive strategy:</strong> {salesPlan.executiveStrategy}</p>
         </section>
 
         <section className="panel recommendations-panel phase-section">
@@ -536,10 +576,11 @@ function App() {
           </div>
           <p><strong>Recommended deployment sequence:</strong></p>
           <ul>
-            {analysis.technicalPlan.deploymentSequence.map((s, i) => <li key={i}>{s}</li>)}
+            {technicalPlan.deploymentSequence.map((s, i) => <li key={i}>{s}</li>)}
           </ul>
-          <p><strong>Prerequisites:</strong> {analysis.technicalPlan.prerequisites}</p>
-          <p><strong>Risks:</strong> {analysis.technicalPlan.risks}</p>
+          <p><strong>Architecture considerations:</strong> {technicalPlan.architecture}</p>
+          <p><strong>Prerequisites:</strong> {technicalPlan.prerequisites}</p>
+          <p><strong>Risks:</strong> {technicalPlan.risks}</p>
         </section>
 
         {/* Phase 5: Workback plan */}
@@ -547,6 +588,23 @@ function App() {
           <div className="section-heading">
             <h2>Phase 5: Workback plan to target deployment ({targetDate})</h2>
             <span>{workbackPlan.length} milestones</span>
+          </div>
+          <div className="section-heading">
+            <h3>Selected use case</h3>
+            <span>{selectedUseCase ? `${selectedUseCase.product} — ${selectedUseCase.title}` : 'None selected'}</span>
+          </div>
+          <div className="use-case-selector">
+            {analysis.useCaseRecommendations.slice(0, 5).map((item, index) => (
+              <button
+                type="button"
+                key={`selector-${item.product}-${index}`}
+                className={`use-case-option${selectedUseCaseIndex === index ? ' use-case-option-active' : ''}`}
+                onClick={() => setSelectedUseCaseIndex(index)}
+              >
+                <strong>{item.product}</strong>
+                <span>{item.title}</span>
+              </button>
+            ))}
           </div>
           <table className="priority-table">
             <thead>
