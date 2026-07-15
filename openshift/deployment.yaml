@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ibm-catalog-advisor
+  namespace: ibm-catalog-advisor
+  labels:
+    app: ibm-catalog-advisor
+    app.kubernetes.io/name: ibm-catalog-advisor
+    app.kubernetes.io/version: "0.0.0"
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ibm-catalog-advisor
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ibm-catalog-advisor
+        app.kubernetes.io/name: ibm-catalog-advisor
+    spec:
+      # OpenShift SCC: restricted — no root, no privileged
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ibm-catalog-advisor
+          # Replace with your actual image registry path after pushing the image
+          image: image-registry.openshift-image-registry.svc:5000/ibm-catalog-advisor/ibm-catalog-advisor:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+      restartPolicy: Always

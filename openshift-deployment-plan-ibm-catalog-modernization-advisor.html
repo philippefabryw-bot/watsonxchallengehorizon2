@@ -1,0 +1,297 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenShift Deployment Plan — IBM Catalog Modernization Advisor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 32px 16px 48px;
+  }
+  .page { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 28px 0 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  h3 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: #3b82d4; }
+  p { margin-bottom: 8px; }
+  ul, ol { padding-left: 20px; margin-bottom: 8px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  pre {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-size: 12px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    overflow-x: auto;
+    margin: 8px 0 14px;
+    line-height: 1.5;
+  }
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #3b82d4;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { background: #f7f8fa; border: 1px solid #e5e7eb; padding: 7px 10px; text-align: left; font-weight: 700; }
+  td { border: 1px solid #e5e7eb; padding: 7px 10px; vertical-align: top; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-right: 4px;
+  }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-green { background: #dcfce7; color: #166534; }
+  .badge-yellow { background: #fef9c3; color: #854d0e; }
+  .badge-purple { background: #ede9fe; color: #5b21b6; }
+  .callout {
+    border-left: 3px solid #3b82d4;
+    background: #f0f6ff;
+    padding: 10px 14px;
+    border-radius: 0 4px 4px 0;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .callout.warn { border-left-color: #f59e0b; background: #fffbeb; }
+  .file-tree {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 12px 14px;
+    line-height: 1.8;
+    margin: 8px 0;
+  }
+  .footer {
+    margin-top: 48px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    text-align: center;
+    font-size: 12px;
+    color: #57606a;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>OpenShift Deployment Plan</h1>
+  <p class="subtitle">IBM Catalog Modernization Advisor · React 18 + Vite · nginx 1.27 · OpenShift 4.x</p>
+
+  
+  <h2>Overview</h2>
+  <p>This document describes how to build, push, and operate the <strong>IBM Catalog Modernization Advisor</strong> static SPA on Red Hat OpenShift. The app is a purely client-side React application with no backend — it is served as a compiled set of static assets by nginx.</p>
+
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>App name</td><td><code>ibm-catalog-advisor</code></td></tr>
+    <tr><td>Namespace</td><td><code>ibm-catalog-advisor</code></td></tr>
+    <tr><td>Runtime</td><td>nginx 1.27-alpine (non-root, port 8080)</td></tr>
+    <tr><td>Build strategy</td><td>Docker (multi-stage Node 20 → nginx)</td></tr>
+    <tr><td>Replicas</td><td>2 (rolling update, zero-downtime)</td></tr>
+    <tr><td>TLS</td><td>Edge termination at OpenShift Router (HTTPS redirect)</td></tr>
+    <tr><td>Health check</td><td><code>GET /healthz</code> → HTTP 200</td></tr>
+  </table>
+
+  
+  <h2>Files Created</h2>
+  <div class="file-tree">
+watsonxchallengehorizon2/<br />
+├── Dockerfile.openshift         <span style="color:#57606a"># OpenShift-safe image (non-root, port 8080)</span><br />
+└── openshift/<br />
+    ├── nginx.conf           <span style="color:#57606a"># nginx config: port 8080, /tmp paths, /healthz</span><br />
+    ├── imagestream.yaml     <span style="color:#57606a"># OpenShift ImageStream</span><br />
+    ├── buildconfig.yaml     <span style="color:#57606a"># BuildConfig (S2I-Docker, git triggers)</span><br />
+    ├── deployment.yaml      <span style="color:#57606a"># Deployment (2 replicas, probes, SCC)</span><br />
+    ├── service.yaml         <span style="color:#57606a"># ClusterIP Service on port 8080</span><br />
+    ├── route.yaml           <span style="color:#57606a"># OpenShift Route (TLS edge)</span><br />
+    └── kustomization.yaml   <span style="color:#57606a"># Kustomize root for all resources</span>
+  </div>
+
+  
+  <h2>Why a Separate Dockerfile</h2>
+  <p>The original <code>Dockerfile</code> runs nginx on port 80 as root. OpenShift's default <strong>restricted</strong> Security Context Constraint (SCC) forbids root UIDs and privileged ports (&lt;1024). <code>Dockerfile.openshift</code> fixes this:</p>
+  <ul>
+    <li>Custom <code>nginx.conf</code> binds to port <strong>8080</strong>.</li>
+    <li>All nginx temp/log paths redirected to <code>/tmp</code> (writable by any UID).</li>
+    <li><code>chmod -R 777</code> on cache/run/log dirs during build so the random OpenShift UID can write them.</li>
+    <li>Explicitly sets <code>USER 1001</code>; OpenShift will override with its assigned UID, but the non-root flag is satisfied.</li>
+  </ul>
+  <div class="callout">The original <code>Dockerfile</code> is left untouched — it still works for local development and other container platforms.</div>
+
+  
+  <h2>Step-by-Step Deployment</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Create the namespace</div>
+      <pre>oc new-project ibm-catalog-advisor</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Update the Git URI in BuildConfig</div>
+      <p>Open <code>openshift/buildconfig.yaml</code> and replace the placeholder Git URL:</p>
+      <pre>uri: https://github.com/YOUR_ORG/watsonxchallengehorizon2.git</pre>
+      <p>If the repository is private, also create a Secret and reference it via <code>spec.source.sourceSecret</code>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">Apply all resources with Kustomize</div>
+      <pre>oc apply -k openshift/</pre>
+      <p>This applies resources in the correct dependency order: ImageStream → BuildConfig → Deployment → Service → Route.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div class="step-title">Trigger and monitor the first build</div>
+      <pre># Trigger manually (first run)
+oc start-build ibm-catalog-advisor --follow
+
+# Check build logs
+oc logs -f bc/ibm-catalog-advisor</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div class="step-title">Watch the rollout</div>
+      <pre>oc rollout status deployment/ibm-catalog-advisor</pre>
+      <p>The Deployment watches the ImageStream; once the build completes it will automatically roll out the new pods.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div class="step-title">Get the public URL</div>
+      <pre>oc get route ibm-catalog-advisor -o jsonpath='{.spec.host}'</pre>
+      <p>Open <code>https://&lt;that hostname&gt;</code> in your browser. The Route uses TLS edge termination — HTTP is automatically redirected to HTTPS.</p>
+    </div>
+  </div>
+
+  
+  <h2>Alternative: External Registry (no BuildConfig)</h2>
+  <p>If you prefer to build the image in CI/CD and push to an external registry (Quay, DockerHub, GHCR):</p>
+  <pre># Build locally with the OpenShift Dockerfile
+docker build -f Dockerfile.openshift -t quay.io/YOUR_ORG/ibm-catalog-advisor:latest .
+docker push quay.io/YOUR_ORG/ibm-catalog-advisor:latest
+
+# Skip imagestream.yaml and buildconfig.yaml — just apply the runtime resources
+oc apply -f openshift/deployment.yaml
+oc apply -f openshift/service.yaml
+oc apply -f openshift/route.yaml</pre>
+  <p>Update the <code>image:</code> field in <code>deployment.yaml</code> to your registry path, and create an <code>imagePullSecret</code> if the registry requires authentication.</p>
+
+  
+  <h2>Manifest Design Decisions</h2>
+  <table>
+    <tr><th>Manifest</th><th>Key decisions</th></tr>
+    <tr>
+      <td><code>deployment.yaml</code></td>
+      <td>
+        2 replicas, <code>RollingUpdate</code> with <code>maxUnavailable: 0</code> (zero-downtime).<br />
+        <code>runAsNonRoot: true</code> + <code>allowPrivilegeEscalation: false</code> + all caps dropped (satisfies <em>restricted</em> SCC).<br />
+        Liveness &amp; readiness probes on <code>GET /healthz</code>.<br />
+        CPU 50m–200m · Memory 64Mi–128Mi (suitable for a static file server).
+      </td>
+    </tr>
+    <tr>
+      <td><code>service.yaml</code></td>
+      <td><code>ClusterIP</code> on port 8080 — only the Route is exposed externally.</td>
+    </tr>
+    <tr>
+      <td><code>route.yaml</code></td>
+      <td>TLS <em>edge</em> termination. OpenShift manages the certificate. HTTP → HTTPS redirect enforced.</td>
+    </tr>
+    <tr>
+      <td><code>imagestream.yaml</code></td>
+      <td><code>lookupPolicy.local: true</code> — pods in the namespace can reference the stream by short name.</td>
+    </tr>
+    <tr>
+      <td><code>buildconfig.yaml</code></td>
+      <td>Docker strategy using <code>Dockerfile.openshift</code>. GitHub &amp; generic webhook triggers + base-image change trigger.</td>
+    </tr>
+    <tr>
+      <td><code>kustomization.yaml</code></td>
+      <td>Single-command apply; namespace label injected into all resources. Use the <code>images:</code> patch to pin a specific tag.</td>
+    </tr>
+  </table>
+
+  
+  <h2>Day-2 Operations</h2>
+
+  <h3>Scale replicas</h3>
+  <pre>oc scale deployment/ibm-catalog-advisor --replicas=3</pre>
+
+  <h3>Roll back a bad release</h3>
+  <pre>oc rollout undo deployment/ibm-catalog-advisor</pre>
+
+  <h3>Set up CI/CD webhook</h3>
+  <pre># Retrieve the webhook URL
+oc describe bc/ibm-catalog-advisor | grep -A2 "GitHub"</pre>
+  <p>Paste that URL into your GitHub repository's <strong>Settings → Webhooks</strong>. Every push to <code>main</code> will trigger a new build and automatic rollout.</p>
+
+  <h3>Update the image tag in Kustomize</h3>
+  <p>Add to <code>openshift/kustomization.yaml</code>:</p>
+  <pre>images:
+  - name: image-registry.openshift-image-registry.svc:5000/ibm-catalog-advisor/ibm-catalog-advisor
+    newTag: v1.2.3</pre>
+  <p>Then re-apply with <code>oc apply -k openshift/</code>.</p>
+
+  
+  <div class="callout warn">
+    <strong>Before going to production</strong>, store any secrets (webhook secret, image pull secret) in OpenShift <code>Secret</code> objects rather than embedding them in YAML files. Consider adding a <code>HorizontalPodAutoscaler</code> if traffic is variable.
+  </div>
+
+  <div class="footer">Made with IBM Bob</div>
+</div>
+</body>
+</html>

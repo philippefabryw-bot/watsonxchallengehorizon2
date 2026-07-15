@@ -1,0 +1,11 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: ibm-catalog-advisor
+  namespace: ibm-catalog-advisor
+  labels:
+    app: ibm-catalog-advisor
+    app.kubernetes.io/name: ibm-catalog-advisor
+spec:
+  lookupPolicy:
+    local: true

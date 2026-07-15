@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ibm-catalog-advisor
+
+resources:
+  - imagestream.yaml
+  - buildconfig.yaml
+  - deployment.yaml
+  - service.yaml
+  - route.yaml
+
+commonLabels:
+  app: ibm-catalog-advisor
+  app.kubernetes.io/name: ibm-catalog-advisor
+  app.kubernetes.io/part-of: ibm-catalog-advisor
+
+# To override the image for a specific environment, add an images patch here:
+# images:
+#   - name: image-registry.openshift-image-registry.svc:5000/ibm-catalog-advisor/ibm-catalog-advisor
+#     newTag: v1.2.3

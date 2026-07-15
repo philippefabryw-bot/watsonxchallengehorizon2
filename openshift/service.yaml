@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ibm-catalog-advisor
+  namespace: ibm-catalog-advisor
+  labels:
+    app: ibm-catalog-advisor
+    app.kubernetes.io/name: ibm-catalog-advisor
+    app.kubernetes.io/component: frontend
+spec:
+  selector:
+    app: ibm-catalog-advisor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,21 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ibm-catalog-advisor
+  namespace: ibm-catalog-advisor
+  labels:
+    app: ibm-catalog-advisor
+    app.kubernetes.io/name: ibm-catalog-advisor
+    app.kubernetes.io/component: frontend
+spec:
+  to:
+    kind: Service
+    name: ibm-catalog-advisor
+    weight: 100
+  port:
+    targetPort: http
+  # TLS edge termination — OpenShift handles HTTPS at the router
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

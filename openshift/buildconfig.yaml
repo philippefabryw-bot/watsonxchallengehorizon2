@@ -1,0 +1,36 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: ibm-catalog-advisor
+  namespace: ibm-catalog-advisor
+  labels:
+    app: ibm-catalog-advisor
+    app.kubernetes.io/name: ibm-catalog-advisor
+spec:
+  source:
+    type: Git
+    git:
+      uri: "ssh://git@github.com/drosayee88/watsonxchallengehorizon2.git"
+      ref: main
+    contextDir: "."
+    sourceSecret:
+      name: github-deploy-key
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile.openshift
+  output:
+    to:
+      kind: ImageStreamTag
+      name: ibm-catalog-advisor:latest
+  triggers:
+    # Rebuild automatically on every git push (webhook)
+    - type: GitHub
+      github:
+        secret: ibm-catalog-advisor-webhook-secret
+    # Rebuild automatically on every git push (generic webhook)
+    - type: Generic
+      generic:
+        secret: ibm-catalog-advisor-webhook-secret
+    # Rebuild when base image changes in the cluster
+    - type: ImageChange
