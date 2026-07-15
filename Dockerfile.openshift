@@ -8,17 +8,16 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# ── Stage 2: runtime (OpenShift-compatible UBI nginx) ──────────────────────────
+# ── Stage 2: runtime (UBI nginx) ───────────────────────────────────────────────
 FROM registry.access.redhat.com/ubi9/nginx-124:latest AS runtime
 
-# UBI nginx serves content from /opt/app-root/src and is pre-configured
-# to listen on 8080 as a non-root (1001) user — no manual perms needed.
+# Copy built assets explicitly into the UBI nginx document root
+COPY --from=build /opt/app-root/src/dist/ /opt/app-root/src/
 
-# Copy built assets into the UBI nginx web root
-COPY --from=build /opt/app-root/src/dist .
+# SPA routing fallback so deep links / refreshes serve index.html
+COPY openshift/default.conf "${NGINX_DEFAULT_CONF_PATH}"
 
-# The UBI image's default entrypoint starts nginx correctly.
-# Port 8080 is already the image default.
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# Use the image's built-in run script (handles nginx startup correctly)
+CMD ["/usr/libexec/s2i/run"]
