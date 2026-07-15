@@ -8,5 +8,25 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      window.wxOConfiguration = {
+        orchestrationID: "281f7c9c22bd48d18e6eb14ee62fe9e7_d627b3d6-7cae-48bd-aba8-5442d7643bef",
+        hostURL: "https://us-south.watson-orchestrate.cloud.ibm.com",
+        rootElementID: "root",
+        deploymentPlatform: "ibmcloud",
+        crn: "crn:v1:bluemix:public:watsonx-orchestrate:us-south:a/281f7c9c22bd48d18e6eb14ee62fe9e7:d627b3d6-7cae-48bd-aba8-5442d7643bef::",
+        chatOptions: {
+          agentId: "e0c0cf71-f218-4c19-9056-0a06c21f728d",
+        }
+      };
+      setTimeout(function () {
+        const script = document.createElement('script');
+        script.src = `${window.wxOConfiguration.hostURL}/wxochat/wxoLoader.js?embed=true`;
+        script.addEventListener('load', function () {
+          wxoLoader.init();
+        });
+        document.head.appendChild(script);
+      }, 0);
+    </script>
   </body>
 </html>
