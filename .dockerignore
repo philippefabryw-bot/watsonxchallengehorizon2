@@ -5,5 +5,5 @@ dist
 .bob
 README.md
 *.docx
-*.html
+openshift-deployment-plan-*.html
 openshift
