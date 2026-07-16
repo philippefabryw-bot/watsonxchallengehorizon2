@@ -371,6 +371,66 @@ const TABS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Markdown table → llmRows parser
+// Handles the rich markdown table the model returns when it doesn't emit JSON.
+// Maps any column names the model uses to the fixed { week, activity, owner,
+// targetDate, focus, dependencies } shape expected by the table renderer.
+// ---------------------------------------------------------------------------
+function parseMarkdownTable(text) {
+  // Find the first line that looks like a markdown table header (contains |)
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const headerIdx = lines.findIndex((l) => l.startsWith('|') && l.includes('|', 1));
+  if (headerIdx === -1) return null;
+
+  // Parse column names from the header row
+  const headers = lines[headerIdx]
+    .split('|')
+    .map((h) => h.trim().toLowerCase().replace(/[^a-z0-9 ]/g, ''))
+    .filter(Boolean);
+
+  // Skip the separator row (---|---) and collect data rows
+  const dataLines = lines.slice(headerIdx + 1).filter(
+    (l) => l.startsWith('|') && !/^\|[\s|:-]+\|$/.test(l),
+  );
+
+  if (dataLines.length === 0) return null;
+
+  // Column index helpers — pick the best match for each target field
+  const col = (candidates) => {
+    for (const c of candidates) {
+      const idx = headers.findIndex((h) => h.includes(c));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  const iPhase      = col(['phase', 'week', 'step']);
+  const iActivity   = col(['key activit', 'activit', 'task', 'description']);
+  const iOwner      = col(['owner']);
+  const iStart      = col(['start', 'relative', 'target date', 'date']);
+  const iDuration   = col(['duration', 'effort', 'focus']);
+  const iMilestone  = col(['milestone', 'deliverable', 'depend', 'outcome']);
+
+  return dataLines.map((line, i) => {
+    const cells = line
+      .split('|')
+      .map((c) => c.trim().replace(/<br\s*\/?>/gi, ' ').replace(/\*\*/g, '').replace(/[🔟1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣]/g, '').trim())
+      .filter((_, idx) => idx > 0 && idx <= headers.length); // drop leading/trailing empty splits
+
+    const get = (idx) => (idx !== -1 && idx < cells.length ? cells[idx] || '—' : '—');
+
+    return {
+      week:         get(iPhase)     || String(i + 1),
+      activity:     get(iActivity),
+      owner:        get(iOwner),
+      targetDate:   get(iStart),
+      focus:        get(iDuration),
+      dependencies: get(iMilestone),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 function App() {
@@ -472,13 +532,9 @@ function App() {
         data?.generated_text ??
         JSON.stringify(data, null, 2);
 
-      // The model may echo the prompt before the real answer, producing multiple
-      // JSON arrays in one output. Extract every [...] block and take the last one.
-      const arrayMatches = [...fullText.matchAll(/\[[\s\S]*?\]/g)];
-      if (arrayMatches.length === 0) {
-        throw new Error(`Could not find a JSON array in the model response. Raw output:\n${fullText}`);
-      }
+      // ── 1. Try JSON array (original format) ────────────────────────────
       let parsed = null;
+      const arrayMatches = [...fullText.matchAll(/\[[\s\S]*?\]/g)];
       for (let i = arrayMatches.length - 1; i >= 0; i--) {
         try {
           const candidate = JSON.parse(arrayMatches[i][0]);
@@ -490,8 +546,14 @@ function App() {
           // not valid JSON, try the previous match
         }
       }
+
+      // ── 2. Fall back: parse a markdown table ────────────────────────────
       if (!parsed) {
-        throw new Error(`Could not parse the model response as a workback JSON array. Raw output:\n${fullText}`);
+        parsed = parseMarkdownTable(fullText);
+      }
+
+      if (!parsed || parsed.length === 0) {
+        throw new Error(`Could not parse the model response. Raw output:\n${fullText}`);
       }
       setLlmRows(parsed);
     } catch (err) {
@@ -713,18 +775,18 @@ function App() {
               <table className="priority-table">
                 <thead>
                   <tr>
-                    <th>Week</th>
-                    <th>Activity</th>
-                    <th>Owner</th>
-                    <th>Target Date</th>
-                    <th>Focus</th>
-                    <th>Dependencies</th>
+                    <th>Phase</th>
+                    <th>Key Activities</th>
+                    <th>Owner(s)</th>
+                    <th>Start</th>
+                    <th>Duration</th>
+                    <th>Milestones / Deliverables</th>
                   </tr>
                 </thead>
                 <tbody>
                   {llmRows.map((row, i) => (
                     <tr key={`llm-row-${i}`}>
-                      <td>W{row.week}</td>
+                      <td>{row.week}</td>
                       <td>{row.activity}</td>
                       <td>{row.owner}</td>
                       <td>{row.targetDate || '—'}</td>
