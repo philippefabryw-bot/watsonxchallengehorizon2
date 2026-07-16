@@ -1,23 +1,17 @@
-# ── Stage 1: build ────────────────────────────────────────────────────────────
-FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS build
+# UBI Node.js 20 — same registry that worked for the frontend (no Docker Hub auth)
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest
+
 WORKDIR /opt/app-root/src
 
-COPY package.json package-lock.json ./
-RUN npm ci
+# Install production dependencies first (better layer caching)
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
 
-COPY . .
-RUN npm run build
+# Copy the server
+COPY server.js ./
 
-# ── Stage 2: runtime (UBI nginx) ───────────────────────────────────────────────
-FROM registry.access.redhat.com/ubi9/nginx-124:latest AS runtime
-
-# Copy built assets explicitly into the UBI nginx document root
-COPY --from=build /opt/app-root/src/dist/ /opt/app-root/src/
-
-# SPA routing fallback so deep links / refreshes serve index.html
-COPY openshift/default.conf "${NGINX_DEFAULT_CONF_PATH}"
-
+# UBI images already run as a non-root (1001) user in the root group,
+# so no USER/chmod juggling is needed.
 EXPOSE 8080
 
-# Use the image's built-in run script (handles nginx startup correctly)
-CMD ["/usr/libexec/s2i/run"]
+CMD ["node", "server.js"]

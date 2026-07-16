@@ -1,20 +1,16 @@
 {
-  "name": "ibm-catalog-modernization-advisor",
-  "private": true,
-  "version": "0.0.0",
+  "name": "wxo-workback-proxy",
+  "version": "1.0.0",
+  "description": "Server-side proxy for watsonx.ai workback-plan generation",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.2"
+    "express": "^4.19.2"
   }
 }

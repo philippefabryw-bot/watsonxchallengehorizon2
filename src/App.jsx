@@ -373,15 +373,6 @@ const TABS = [
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// watsonx LLM endpoint config
-// ---------------------------------------------------------------------------
-
-// Relative path — proxied by Vite dev server (vite.config.js) in development
-// and by nginx (openshift/nginx.conf) in production. Avoids browser CORS restrictions.
-const WX_ENDPOINT =
-  '/wx-api/ml/v1/deployments/wbplangenerator/text/generation_stream?version=2021-05-01';
-
 function App() {
   const [products, setProducts] = useState(SAMPLE_ENTRIES);
   const [fileName, setFileName] = useState('Built-in sample (30 entries from ibm-license-catalog.xlsx)');
@@ -391,7 +382,6 @@ function App() {
   const [activeTab, setActiveTab] = useState('overview');
 
   // ── watsonx workback plan LLM state ──────────────────────────────────────
-  const [iamToken, setIamToken] = useState('');
   const [llmRows, setLlmRows] = useState(null);   // parsed JSON array once complete
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState(null);
@@ -448,15 +438,10 @@ function App() {
     };
   }, [selectedUseCase, selectedProductPriority]);
 
-  // ── LLM streaming fetch ───────────────────────────────────────────────────
+  // ── LLM fetch (via backend proxy) ────────────────────────────────────────
   const fetchLlmWorkbackPlan = useCallback(async () => {
     if (!selectedUseCase) return;
-    if (!iamToken.trim()) {
-      setLlmError('Please enter your IAM Bearer token before generating.');
-      return;
-    }
 
-    // Abort any in-flight request
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -468,18 +453,10 @@ function App() {
     const usecaseVar = `${selectedUseCase.product} — ${selectedUseCase.title}`;
 
     try {
-      const response = await fetch(WX_ENDPOINT, {
+      const response = await fetch('/api/workback', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${iamToken.trim()}`,
-        },
-        body: JSON.stringify({
-          parameters: {
-            prompt_variables: { Usecase: usecaseVar },
-          },
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usecase: usecaseVar }),
         signal: controller.signal,
       });
 
@@ -488,38 +465,12 @@ function App() {
         throw new Error(`API error ${response.status}: ${text}`);
       }
 
-      // Read the SSE / NDJSON stream — accumulate all tokens, parse JSON at the end
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let lineBuffer = '';
-      let fullText = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        lineBuffer += decoder.decode(value, { stream: true });
-
-        // Each line may be an SSE "data: {...}" line or a raw JSON line
-        const lines = lineBuffer.split('\n');
-        lineBuffer = lines.pop(); // keep any incomplete trailing line
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === 'data: [DONE]') continue;
-          const jsonStr = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
-          try {
-            const chunk = JSON.parse(jsonStr);
-            // watsonx generation_stream shape: { results: [{ generated_text: "..." }] }
-            const token =
-              chunk?.results?.[0]?.generated_text ??
-              chunk?.generated_text ??
-              '';
-            fullText += token;
-          } catch {
-            // ignore non-JSON SSE envelope lines
-          }
-        }
-      }
+      const data = await response.json();
+      // watsonx generation (non-stream) shape: { results: [{ generated_text }] }
+      const fullText =
+        data?.results?.[0]?.generated_text ??
+        data?.generated_text ??
+        JSON.stringify(data, null, 2);
 
       // The model may echo the prompt before the real answer, producing multiple
       // JSON arrays in one output. Extract every [...] block and take the last one.
@@ -527,7 +478,6 @@ function App() {
       if (arrayMatches.length === 0) {
         throw new Error(`Could not find a JSON array in the model response. Raw output:\n${fullText}`);
       }
-      // Try each match from last to first — the final array is the actual answer
       let parsed = null;
       for (let i = arrayMatches.length - 1; i >= 0; i--) {
         try {
@@ -551,7 +501,7 @@ function App() {
     } finally {
       setLlmLoading(false);
     }
-  }, [selectedUseCase, iamToken]);
+  }, [selectedUseCase]);
 
   const topLicenseModel = Object.entries(analysis.portfolioHighlights.licenseModelBreakdown).sort(
     (a, b) => b[1] - a[1],
@@ -734,15 +684,6 @@ function App() {
             </p>
           </div>
           <div className="llm-controls">
-            <input
-              type="password"
-              className="llm-token-input"
-              placeholder="Paste your IAM Bearer token"
-              value={iamToken}
-              onChange={(e) => setIamToken(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
             <button
               type="button"
               className={`llm-generate-btn${llmLoading ? ' llm-generate-btn-loading' : ''}`}

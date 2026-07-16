@@ -5,13 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // Proxy /wx-api/* → watsonx AU-SYD, stripping the /wx-api prefix.
-      // This runs server-side so no CORS headers are needed.
-      '/wx-api': {
-        target: 'https://au-syd.ml.cloud.ibm.com',
+      // Proxy /api/* → the backend proxy server during local development.
+      // In production (OpenShift), the route handles /api directly.
+      '/api': {
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/wx-api/, ''),
-        secure: true,
       },
     },
   },

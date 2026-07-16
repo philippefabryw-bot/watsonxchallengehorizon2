@@ -1,0 +1,133 @@
+# ============================================================================
+# watsonx workback proxy — OpenShift resources
+# Namespace assumed: ibm-catalog-advisor (same as the frontend)
+# Apply after creating the API-key secret (see README).
+# ============================================================================
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: wxo-workback-proxy
+  namespace: ibm-catalog-advisor
+  labels:
+    app: wxo-workback-proxy
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: wxo-workback-proxy
+  namespace: ibm-catalog-advisor
+  labels:
+    app: wxo-workback-proxy
+spec:
+  source:
+    type: Git
+    git:
+      # Point this at wherever you commit the backend. If you keep it in the
+      # SAME repo as the frontend, set contextDir to the backend subfolder.
+      uri: "ssh://git@github.com/drosayee88/watsonxchallengehorizon2.git"
+      ref: main
+    contextDir: "backend"        # <-- backend lives in /backend of the repo
+    sourceSecret:
+      name: github-deploy-key    # reuse the existing deploy-key secret
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile.openshift
+  output:
+    to:
+      kind: ImageStreamTag
+      name: wxo-workback-proxy:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wxo-workback-proxy
+  namespace: ibm-catalog-advisor
+  labels:
+    app: wxo-workback-proxy
+  annotations:
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"wxo-workback-proxy:latest"},"fieldPath":"spec.template.spec.containers[0].image"}]
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wxo-workback-proxy
+  template:
+    metadata:
+      labels:
+        app: wxo-workback-proxy
+    spec:
+      containers:
+        - name: wxo-workback-proxy
+          image: image-registry.openshift-image-registry.svc:5000/ibm-catalog-advisor/wxo-workback-proxy:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: WATSONX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: watsonx-api-key
+                  key: apikey
+            # Optional overrides (defaults baked into server.js):
+            # - name: WATSONX_DEPLOYMENT_URL
+            #   value: "https://au-syd.ml.cloud.ibm.com/ml/v1/deployments/wbplangen/text/generation?version=2021-05-01"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wxo-workback-proxy
+  namespace: ibm-catalog-advisor
+  labels:
+    app: wxo-workback-proxy
+spec:
+  selector:
+    app: wxo-workback-proxy
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+# Route that exposes ONLY the /api path of the backend.
+# The frontend keeps its own route; this one handles same-origin-looking /api calls.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: wxo-workback-proxy
+  namespace: ibm-catalog-advisor
+  labels:
+    app: wxo-workback-proxy
+spec:
+  host: ibm-catalog-advisor-ibm-catalog-advisor.apps.itzocp-663002esur-cs31.selfservice.aws.techzone.ibm.com
+  path: /api
+  to:
+    kind: Service
+    name: wxo-workback-proxy
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
