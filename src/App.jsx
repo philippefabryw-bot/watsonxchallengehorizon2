@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 // ---------------------------------------------------------------------------
@@ -359,48 +359,6 @@ const analyzeCatalog = (products) => {
 };
 
 // ---------------------------------------------------------------------------
-// Workback plan generator
-// ---------------------------------------------------------------------------
-const formatDate = (date) => date.toISOString().slice(0, 10);
-
-const generateWorkbackPlan = (targetDate, selectedUseCase) => {
-  const target = new Date(targetDate);
-  const now = new Date();
-  const weeksToTarget = Math.ceil((target - now) / (7 * 24 * 60 * 60 * 1000));
-
-  if (!selectedUseCase) {
-    return [{ week: 0, activity: 'Select a suggested use case to generate a tailored workback plan', owner: 'User', focus: 'Use-case selection', targetDate: '—', dependencies: 'None' }];
-  }
-  if (weeksToTarget < 12) {
-    return [{ week: 0, activity: 'Insufficient lead time', owner: 'N/A', focus: 'Timeline risk', targetDate: '—', dependencies: 'Adjust deadline or reduce scope' }];
-  }
-
-  const useCaseTheme = selectedUseCase.title;
-  const product = selectedUseCase.product;
-  const row = (weekOffset, activity, owner, focus, dependencies) => {
-    const date = new Date(target);
-    date.setDate(date.getDate() - (weeksToTarget - weekOffset) * 7);
-    return { week: weekOffset, activity, owner, focus, targetDate: formatDate(date), dependencies };
-  };
-
-  return [
-    row(weeksToTarget - 12, `Confirm ${useCaseTheme.toLowerCase()} as the priority motion for ${product}`, 'Tech Sales Leader', 'Opportunity qualification', 'Catalog review and account prioritization'),
-    row(weeksToTarget - 11, `Identify executive sponsor, business owner, and project stakeholders for ${product}`, 'Tech Sales Leader / Client Sponsor', 'Stakeholder alignment', 'Opportunity qualification complete'),
-    row(weeksToTarget - 10, `Run discovery workshops and define current-state pain points for ${useCaseTheme.toLowerCase()}`, 'ATL / CSE', 'Discovery', 'Stakeholders identified'),
-    row(weeksToTarget - 9, `Document business case, success criteria, and renewal/value impact for ${product}`, 'Tech Sales Leader', 'Value case', 'Discovery findings approved'),
-    row(weeksToTarget - 8, `Map target architecture, required integrations, and implementation scope for ${product}`, 'ATL', 'Architecture and scope', 'Success criteria defined'),
-    row(weeksToTarget - 7, `Execute demo, pilot, or POC validating ${useCaseTheme.toLowerCase()} outcomes`, 'CSE / Client Team', 'Solution validation', 'Architecture scope approved'),
-    row(weeksToTarget - 6, `Secure funding, commercial alignment, and sponsor commitment`, 'Tech Sales Leader / Client Sponsor', 'Commercial approval', 'POC or validation outcome accepted'),
-    row(weeksToTarget - 5, `Build project plan with owners, milestones, RAID items, and governance cadence`, 'Project Manager / ATL', 'Project planning', 'Funding and sponsor commitment secured'),
-    row(weeksToTarget - 4, `Prepare environments, access, data sources, and integration prerequisites`, 'Client IT / CSE', 'Deployment readiness', 'Project plan baselined'),
-    row(weeksToTarget - 3, `Execute implementation sprint and validate configuration against success criteria`, 'Client IT / CSE', 'Implementation', 'Environment readiness complete'),
-    row(weeksToTarget - 2, `Complete testing, user enablement, and operational handoff planning`, 'CSE / Client Operations', 'Adoption readiness', 'Implementation sprint complete'),
-    row(weeksToTarget - 1, `Run go-live readiness review, cutover approval, and rollback planning`, 'Project Manager / Client Sponsor', 'Go-live governance', 'Testing and enablement complete'),
-    row(weeksToTarget, `Deploy ${product} into production and begin KPI/value tracking for ${useCaseTheme.toLowerCase()}`, 'Client IT / Business Owner', 'Production deployment', 'Go-live approval granted'),
-  ];
-};
-
-// ---------------------------------------------------------------------------
 // Tab definitions
 // ---------------------------------------------------------------------------
 const TABS = [
@@ -415,6 +373,15 @@ const TABS = [
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// watsonx LLM endpoint config
+// ---------------------------------------------------------------------------
+
+// Relative path — proxied by Vite dev server (vite.config.js) in development
+// and by nginx (openshift/nginx.conf) in production. Avoids browser CORS restrictions.
+const WX_ENDPOINT =
+  '/wx-api/ml/v1/deployments/wbplangenerator/text/generation_stream?version=2021-05-01';
+
 function App() {
   const [products, setProducts] = useState(SAMPLE_ENTRIES);
   const [fileName, setFileName] = useState('Built-in sample (30 entries from ibm-license-catalog.xlsx)');
@@ -422,6 +389,19 @@ function App() {
   const [targetDate, setTargetDate] = useState('2025-12-31');
   const [selectedUseCaseIndex, setSelectedUseCaseIndex] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // ── watsonx workback plan LLM state ──────────────────────────────────────
+  const [iamToken, setIamToken] = useState('');
+  const [llmRows, setLlmRows] = useState(null);   // parsed JSON array once complete
+  const [llmLoading, setLlmLoading] = useState(false);
+  const [llmError, setLlmError] = useState(null);
+  const abortRef = useRef(null);
+
+  // Reset LLM output whenever the selected use case changes
+  useEffect(() => {
+    setLlmRows(null);
+    setLlmError(null);
+  }, [selectedUseCaseIndex]);
 
   const analysis = useMemo(() => analyzeCatalog(products), [products]);
   const selectedUseCase = analysis.useCaseRecommendations[selectedUseCaseIndex] ?? null;
@@ -468,10 +448,110 @@ function App() {
     };
   }, [selectedUseCase, selectedProductPriority]);
 
-  const workbackPlan = useMemo(
-    () => generateWorkbackPlan(targetDate, selectedUseCase),
-    [targetDate, selectedUseCase],
-  );
+  // ── LLM streaming fetch ───────────────────────────────────────────────────
+  const fetchLlmWorkbackPlan = useCallback(async () => {
+    if (!selectedUseCase) return;
+    if (!iamToken.trim()) {
+      setLlmError('Please enter your IAM Bearer token before generating.');
+      return;
+    }
+
+    // Abort any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLlmRows(null);
+    setLlmError(null);
+    setLlmLoading(true);
+
+    const usecaseVar = `${selectedUseCase.product} — ${selectedUseCase.title}`;
+
+    try {
+      const response = await fetch(WX_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${iamToken.trim()}`,
+        },
+        body: JSON.stringify({
+          parameters: {
+            prompt_variables: { Usecase: usecaseVar },
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => response.statusText);
+        throw new Error(`API error ${response.status}: ${text}`);
+      }
+
+      // Read the SSE / NDJSON stream — accumulate all tokens, parse JSON at the end
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let lineBuffer = '';
+      let fullText = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        lineBuffer += decoder.decode(value, { stream: true });
+
+        // Each line may be an SSE "data: {...}" line or a raw JSON line
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop(); // keep any incomplete trailing line
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          const jsonStr = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+          try {
+            const chunk = JSON.parse(jsonStr);
+            // watsonx generation_stream shape: { results: [{ generated_text: "..." }] }
+            const token =
+              chunk?.results?.[0]?.generated_text ??
+              chunk?.generated_text ??
+              '';
+            fullText += token;
+          } catch {
+            // ignore non-JSON SSE envelope lines
+          }
+        }
+      }
+
+      // The model may echo the prompt before the real answer, producing multiple
+      // JSON arrays in one output. Extract every [...] block and take the last one.
+      const arrayMatches = [...fullText.matchAll(/\[[\s\S]*?\]/g)];
+      if (arrayMatches.length === 0) {
+        throw new Error(`Could not find a JSON array in the model response. Raw output:\n${fullText}`);
+      }
+      // Try each match from last to first — the final array is the actual answer
+      let parsed = null;
+      for (let i = arrayMatches.length - 1; i >= 0; i--) {
+        try {
+          const candidate = JSON.parse(arrayMatches[i][0]);
+          if (Array.isArray(candidate) && candidate.length > 0 && candidate[0].week !== undefined) {
+            parsed = candidate;
+            break;
+          }
+        } catch {
+          // not valid JSON, try the previous match
+        }
+      }
+      if (!parsed) {
+        throw new Error(`Could not parse the model response as a workback JSON array. Raw output:\n${fullText}`);
+      }
+      setLlmRows(parsed);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setLlmError(err.message);
+      }
+    } finally {
+      setLlmLoading(false);
+    }
+  }, [selectedUseCase, iamToken]);
 
   const topLicenseModel = Object.entries(analysis.portfolioHighlights.licenseModelBreakdown).sort(
     (a, b) => b[1] - a[1],
@@ -626,7 +706,6 @@ function App() {
       <section className="panel phase-section">
         <div className="section-heading">
           <h2>Phase 3: Workback plan to target deployment ({targetDate})</h2>
-          <span>{workbackPlan.length} milestones</span>
         </div>
         <div className="section-heading">
           <h3>Selected use case</h3>
@@ -645,32 +724,79 @@ function App() {
             </button>
           ))}
         </div>
-        <div className="table-scroll">
-          <table className="priority-table">
-            <thead>
-              <tr>
-                <th>Week</th>
-                <th>Activity</th>
-                <th>Owner</th>
-                <th>Target Date</th>
-                <th>Focus</th>
-                <th>Dependencies</th>
-              </tr>
-            </thead>
-            <tbody>
-              {workbackPlan.map((item, i) => (
-                <tr key={`wb-${i}`}>
-                  <td>W{item.week}</td>
-                  <td>{item.activity}</td>
-                  <td>{item.owner}</td>
-                  <td>{item.targetDate}</td>
-                  <td>{item.focus}</td>
-                  <td>{item.dependencies}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+        {/* ── watsonx LLM workback plan ─────────────────────────────────── */}
+        <div className="llm-workback-panel">
+          <div className="llm-workback-header">
+            <span className="llm-badge">Powered by watsonx</span>
+            <p className="llm-description">
+              Generate an AI workback plan for <strong>{selectedUseCase ? `${selectedUseCase.product} — ${selectedUseCase.title}` : 'the selected use case'}</strong> using your deployed watsonx LLM.
+            </p>
+          </div>
+          <div className="llm-controls">
+            <input
+              type="password"
+              className="llm-token-input"
+              placeholder="Paste your IAM Bearer token"
+              value={iamToken}
+              onChange={(e) => setIamToken(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className={`llm-generate-btn${llmLoading ? ' llm-generate-btn-loading' : ''}`}
+              onClick={fetchLlmWorkbackPlan}
+              disabled={llmLoading || !selectedUseCase}
+            >
+              {llmLoading ? 'Generating…' : 'Generate with watsonx'}
+            </button>
+            {llmLoading && (
+              <button
+                type="button"
+                className="llm-stop-btn"
+                onClick={() => { abortRef.current?.abort(); setLlmLoading(false); }}
+              >
+                Stop
+              </button>
+            )}
+          </div>
+          {llmError && <p className="llm-error">{llmError}</p>}
+          {llmLoading && (
+            <div className="llm-streaming-indicator">
+              <span className="llm-cursor">▋</span> Generating workback plan…
+            </div>
+          )}
+          {llmRows && !llmLoading && (
+            <div className="table-scroll llm-table-output">
+              <table className="priority-table">
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Activity</th>
+                    <th>Owner</th>
+                    <th>Target Date</th>
+                    <th>Focus</th>
+                    <th>Dependencies</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {llmRows.map((row, i) => (
+                    <tr key={`llm-row-${i}`}>
+                      <td>W{row.week}</td>
+                      <td>{row.activity}</td>
+                      <td>{row.owner}</td>
+                      <td>{row.targetDate || '—'}</td>
+                      <td>{row.focus}</td>
+                      <td>{row.dependencies}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+
       </section>
 
       {/* Phase 4: Value prioritization */}
