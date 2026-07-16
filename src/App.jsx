@@ -491,7 +491,7 @@ function App() {
   const [products, setProducts] = useState(SAMPLE_ENTRIES);
   const [fileName, setFileName] = useState('Built-in sample (29 entries from reference catalog.xlsx — 14 deployed, 15 available)');
   const [parseError, setParseError] = useState(null);
-  const [targetDate, setTargetDate] = useState('2025-12-31');
+  const [targetDate, setTargetDate] = useState('2026-12-31');
   const [selectedUseCaseIndex, setSelectedUseCaseIndex] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
 
