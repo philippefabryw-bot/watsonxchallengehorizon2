@@ -1,97 +1,99 @@
-# watsonxchallengehorizon2
+# IBM Software Portfolio Advisor
 
-Horizon 2 Quebec squad repository for Watsonx challenge.
+A single-container application: one Express server serves the built React app
+**and** proxies watsonx.ai calls, so there's one image, one deployment, no CORS,
+and the IBM Cloud API key never reaches the browser.
 
-## IBM Catalog Modernization Advisor
+## Architecture
 
-This repository contains a React + Vite application that analyzes an IBM software catalog from the workbook [`../ibm-license-catalog.xlsx.xlsx`](../ibm-license-catalog.xlsx.xlsx) and uses the guidance in [`Build context file.docx`](Build context file.docx) to generate richer client-planning outputs.
-
-## What the app now produces
-
-Using the IBM ACP catalog workbook as the primary input, the app now supports a phased workflow aligned to the build context:
-
-1. **Client-specific knowledge base**
-   - summarizes the client's IBM software footprint
-   - groups solutions into inferred categories
-   - aligns the catalog to embedded market signals
-
-2. **Executive client presentation framing**
-   - generates `What / Why / How / Why Now` narratives for key solution families
-
-3. **Deployment value analysis and prioritization**
-   - ranks opportunities by consumption rate and pricing signals
-   - highlights renewal and value-realization opportunities
-
-4. **Account planning outputs**
-   - business plan for technology sales leaders
-   - technical plan for ATLs and CSEs
-
-5. **Workback plan to deployment**
-   - creates milestone-based planning from a user-selected target deployment date
-
-## Input source
-
-Primary workbook used during implementation:
-- [`../ibm-license-catalog.xlsx.xlsx`](../ibm-license-catalog.xlsx.xlsx)
-- primary sheet: `Table 1 ACP (Cad)`
-
-The app expects an XLSX file with rows containing these fields:
-
-- `S&S part number`
-- `License part number`
-- `Description`
-- `Royalty`
-- `Consumption rate (CAD)`
-- `ACP S&S Unit Reference Price for NTE for 2029 (CAD)`
-- `ACP S&S Unit Reference Price for NTE for 2030 (CAD)`
-
-Because the workbook does not provide separate product family, category, or license model columns, the UI derives those values from the `Description` field.
-
-## Architecture diagram
-
-```mermaid
-flowchart TD
-    A[IBM ACP catalog XLSX] --> B[React UI]
-    B --> C[XLSX workbook parser]
-    C --> D[Derived catalog model]
-    D --> E[License model inference]
-    D --> F[Product family and category inference]
-    D --> G[Pricing comparison 2029 vs 2030]
-    D --> H[Phase-based planning engine]
-    H --> I[Knowledge base summary]
-    H --> J[Executive presentation cards]
-    H --> K[Deployment value prioritization]
-    H --> L[Sales leader business plan]
-    H --> M[ATL/CSE technical plan]
-    H --> N[Workback plan to deployment]
-    O[Embedded market signal library] --> H
 ```
+                 ┌────────────────────────────────────────┐
+  browser ──────►│  Express (server.js) on :8080          │
+                 │                                        │
+                 │   /api/workback  → watsonx.ai (proxy)  │
+                 │   /healthz       → probe               │
+                 │   /* everything  → React app (./dist)  │
+                 └────────────────────────────────────────┘
+```
+
+- `POST /api/workback` — mints an IAM token from `WATSONX_API_KEY` (server-side,
+  cached ~1h) and calls the `wbplangen` deployment. The browser sends only
+  `{ "usecase": "..." }` — no token, no key.
+- Everything else is served from the Vite build output in `./dist`, with an
+  SPA fallback to `index.html`.
 
 ## Local development
 
-1. Install Node.js and npm.
-2. Run [`npm install`](package.json)
-3. Run [`npm run dev`](package.json)
-4. Run [`npm run build`](package.json)
+Two options:
 
-## Docker
-
-Build the image:
-
-```powershell
-docker build -t ibm-catalog-modernization-advisor .
+**A. Full stack (matches production):**
+```bash
+npm install
+npm run build                       # produces ./dist
+WATSONX_API_KEY=your_key npm start  # serves app + api on :8080
+# open http://localhost:8080
 ```
 
-Run the container:
-
-```powershell
-docker run --rm -p 8080:80 ibm-catalog-modernization-advisor
+**B. Vite dev server with hot reload:**
+```bash
+npm install
+WATSONX_API_KEY=your_key node server.js   # api on :8080 (terminal 1)
+npm run dev                                # vite on :5173 (terminal 2)
+# open http://localhost:5173  — vite.config.js proxies /api → :8080
 ```
 
-Then open `http://localhost:8080`.
+## Deploy to OpenShift
 
-The container build is defined in [`Dockerfile`](Dockerfile) and serves the production build with nginx.
+### 1. Create the API-key secret (once)
+```bash
+oc create secret generic watsonx-api-key \
+  --from-literal=apikey=YOUR_IBM_CLOUD_API_KEY \
+  -n ibm-catalog-advisor
+```
 
-## Dependencies
+### 2. Apply the manifests
+```bash
+oc apply -k openshift/          # kustomize applies all resources
+```
 
-The app depends on [`xlsx`](package.json) to parse IBM catalog workbooks in the browser.
+### 3. Build and roll out
+```bash
+oc start-build ibm-catalog-advisor --follow -n ibm-catalog-advisor
+oc rollout status deployment/ibm-catalog-advisor -n ibm-catalog-advisor
+```
+
+The Deployment has an image trigger, so a new build auto-redeploys. Verify:
+```bash
+oc get pods -n ibm-catalog-advisor          # want 2/2 pods 1/1 READY
+curl -k https://YOUR_ROUTE_HOST/healthz     # -> ok
+```
+
+## What lives where
+
+```
+├── server.js               # unified Express server (static + API)
+├── package.json            # react + vite (build) + express (runtime)
+├── Dockerfile.openshift     # multi-stage: build React, run Express
+├── index.html / src/        # React app source (+ watsonx chat widget)
+├── vite.config.js           # dev-server /api proxy
+└── openshift/
+    ├── buildconfig.yaml      # Docker build from Dockerfile.openshift
+    ├── imagestream.yaml
+    ├── deployment.yaml       # injects WATSONX_API_KEY from secret
+    ├── service.yaml          # :8080
+    ├── route.yaml            # edge TLS
+    └── kustomization.yaml
+```
+
+## Key fixes applied
+
+- **One app, one image.** Removed the separate `backend/` folder and the
+  conflicting Dockerfiles; the frontend Dockerfile had been overwritten with
+  backend content. Everything is now one Express process.
+- **UBI npm EACCES fixed.** The Dockerfile copies only `package.json` (not the
+  lockfile) and uses `--no-package-lock`, so npm never fails writing the
+  lockfile under OpenShift's arbitrary UID.
+- **No CORS, no browser token.** The API key stays server-side; the browser
+  calls same-origin `/api/workback`.
+- **Removed nginx.** Express serves the static build and the SPA fallback, so
+  there's no nginx config to keep in sync.

@@ -10,12 +10,12 @@ resources:
   - service.yaml
   - route.yaml
 
+# NOTE: the watsonx-api-key secret is intentionally NOT managed here.
+# Create it once, out-of-band, so the key never lives in Git:
+#   oc create secret generic watsonx-api-key \
+#     --from-literal=apikey=YOUR_KEY -n ibm-catalog-advisor
+
 commonLabels:
   app: ibm-catalog-advisor
   app.kubernetes.io/name: ibm-catalog-advisor
   app.kubernetes.io/part-of: ibm-catalog-advisor
-
-# To override the image for a specific environment, add an images patch here:
-# images:
-#   - name: image-registry.openshift-image-registry.svc:5000/ibm-catalog-advisor/ibm-catalog-advisor
-#     newTag: v1.2.3

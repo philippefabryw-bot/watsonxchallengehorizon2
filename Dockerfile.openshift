@@ -1,17 +1,35 @@
-# UBI Node.js 20 — same registry that worked for the frontend (no Docker Hub auth)
-FROM registry.access.redhat.com/ubi9/nodejs-20:latest
+# ============================================================================
+# IBM Software Portfolio Advisor — single-container build
+# Stage 1 builds the React app; stage 2 runs one Express server that serves
+# the built app AND proxies /api/workback to watsonx.
+# ============================================================================
 
+# ── Stage 1: build the React frontend ──────────────────────────────────────
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS build
 WORKDIR /opt/app-root/src
 
-# Install production dependencies first (better layer caching)
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+# Copy only package.json (not the lockfile) so npm generates one it owns,
+# avoiding the UBI arbitrary-UID EACCES permission error.
+COPY package.json ./
+RUN npm install
 
-# Copy the server
+# Build the static site into /opt/app-root/src/dist
+COPY . .
+RUN npm run build
+
+# ── Stage 2: runtime — Express serves static + API ─────────────────────────
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS runtime
+WORKDIR /opt/app-root/src
+
+# Install ONLY the production dependency (express). Again, copy just
+# package.json and let npm build a fresh lockfile it owns.
+COPY package.json ./
+RUN npm install --omit=dev --no-package-lock
+
+# Bring in the server and the built static assets from stage 1
 COPY server.js ./
+COPY --from=build /opt/app-root/src/dist ./dist
 
-# UBI images already run as a non-root (1001) user in the root group,
-# so no USER/chmod juggling is needed.
 EXPOSE 8080
 
 CMD ["node", "server.js"]
