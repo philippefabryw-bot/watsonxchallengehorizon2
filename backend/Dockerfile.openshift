@@ -1,0 +1,17 @@
+# UBI Node.js 20 — same registry that worked for the frontend (no Docker Hub auth)
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest
+
+WORKDIR /opt/app-root/src
+
+# Install production dependencies first (better layer caching)
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
+# Copy the server
+COPY server.js ./
+
+# UBI images already run as a non-root (1001) user in the root group,
+# so no USER/chmod juggling is needed.
+EXPOSE 8080
+
+CMD ["node", "server.js"]
