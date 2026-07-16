@@ -323,6 +323,42 @@ textarea {
   color: #fecaca;
 }
 
+.badge-deployed {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #bbf7d0;
+}
+
+.badge-available {
+  background: rgba(250, 204, 21, 0.14);
+  border-color: rgba(253, 224, 71, 0.25);
+  color: #fde68a;
+}
+
+.badge-platform-pa {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #bfdbfe;
+}
+
+.badge-platform-z {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(196, 132, 252, 0.3);
+  color: #e9d5ff;
+}
+
+.row-deployed {
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.panel-note {
+  color: #94a3b8;
+  font-size: 0.88rem;
+  margin: 0 0 14px 0;
+}
+
+
+
 .price-row {
   margin: 12px 0;
   color: #cbd5e1;

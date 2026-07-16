@@ -1,0 +1,40 @@
+{
+  "source": "reference catalog.xlsx",
+  "contentHash": "11e753e00cbb4c7a",
+  "sheets": [
+    {
+      "name": "Weighting",
+      "file": "Weighting.json",
+      "rowCount": 6168,
+      "headers": [
+        "Start Date",
+        "Mon Jun 29 2026 20:00:00 GMT-0400 (Eastern Daylight Time)",
+        "Start Date is in the past",
+        "Cashflow periods (number  of months) as reflected in DMSS",
+        "Must Equal Zero ",
+        "Validation Lists - do not delete"
+      ]
+    },
+    {
+      "name": "uplift PA",
+      "file": "uplift_PA.json",
+      "rowCount": 6208,
+      "headers": [
+        "Start Date",
+        "Sun Jun 29 2025 20:00:00 GMT-0400 (Eastern Daylight Time)",
+        "Start Date is in the past",
+        "Validation Lists - do not delete"
+      ]
+    },
+    {
+      "name": "Weighting (BL)",
+      "file": "Weighting__BL_.json",
+      "rowCount": 5001,
+      "headers": [
+        "Instructions",
+        "Column D",
+        "Cell E8"
+      ]
+    }
+  ]
+}

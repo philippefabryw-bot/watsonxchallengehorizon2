@@ -123,99 +123,145 @@ const deriveCategory = (desc) => {
 };
 
 // ---------------------------------------------------------------------------
-// XLSX parsing
+// XLSX parsing — reference catalog format (Weighting sheet)
+// Header row contains: S&S Part No, Licence Part No, Licence Description,
+// Deployment Plan Quantity, z (platform), License Entitled Price, ...
+// Drawdown Price - Discounted = IBM cost
+// Drawdown Price - Weighted   = client price
+// Deployment Plan Quantity non-null/non-zero = deployed; null/0 = available
 // ---------------------------------------------------------------------------
-const ACP_HEADERS = [
-  'S&S part number',
-  'License part number',
-  'Description',
-  'Royalty',
-  'Consumption rate (CAD)',
-  'ACP S&S Unit Reference Price for NTE for 2029 (CAD)',
-  'ACP S&S Unit Reference Price for NTE for 2030 (CAD)',
-];
-
 const parseXlsxWorkbook = (workbook) => {
+  // Prefer the "Weighting" sheet; fall back to first sheet
   const sheetName =
-    workbook.SheetNames.find((n) => /ACP/i.test(n)) ?? workbook.SheetNames[0];
+    workbook.SheetNames.find((n) => /weighting/i.test(n) && !/BL/i.test(n)) ??
+    workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-  const headerRowIndex = raw.findIndex((row) =>
-    row.some((cell) => typeof cell === 'string' && cell.trim() === ACP_HEADERS[2]),
-  );
+
+  // Find the header row: must contain both "Licence Description" and "Deployment Plan Quantity"
+  const headerRowIndex = raw.findIndex((row) => {
+    const joined = row.map((v) => String(v ?? '')).join('|');
+    return joined.includes('Licence Description') && joined.includes('Deployment Plan Quantity');
+  });
   if (headerRowIndex < 0) return [];
-  const headers = raw[headerRowIndex].map((h) => (h ? String(h).trim() : ''));
-  const descIdx = headers.findIndex((h) => h === 'Description');
-  const royaltyIdx = headers.findIndex((h) => h === 'Royalty');
-  const consumptionIdx = headers.findIndex((h) => /Consumption rate/i.test(h));
-  const price2029Idx = headers.findIndex((h) => /2029/i.test(h));
-  const price2030Idx = headers.findIndex((h) => /2030/i.test(h));
-  const ssPartIdx = headers.findIndex((h) => /S&S part/i.test(h));
-  const licPartIdx = headers.findIndex((h) => /License part/i.test(h));
+
+  const headers = raw[headerRowIndex].map((h) => String(h ?? '').trim());
+  const hIdx = (name) => headers.findIndex((h) => h === name);
+  const hMatch = (pat) => headers.findIndex((h) => pat.test(h));
+
+  const ssPartIdx        = hIdx('S&S Part No');
+  const licPartIdx       = hIdx('Licence Part No');
+  const descIdx          = hIdx('Licence Description');
+  const deployQtyIdx     = hIdx('Deployment Plan Quantity');
+  const platformIdx      = hIdx('z');
+  const licEntitledIdx   = hIdx('License Entitled Price');
+  const ssEntitledIdx    = hIdx('S&S Entitled Price');
+  const drawEntitledIdx  = hIdx('Drawdown Price - Entitled');
+  const discountIdx      = hIdx('Discount');
+  const ibmCostIdx       = hIdx('Drawdown Price - Discounted');
+  const clientPriceIdx   = hIdx('Drawdown Price - Weighted');
+  const extNetIdx        = hIdx('Extended Net Price');
+  const extWeightedIdx   = hIdx('Extended Weighted Price');
+
+  const safeNum = (row, i) => {
+    if (i < 0 || i >= row.length) return null;
+    const v = row[i];
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'string' && (v.startsWith('#') || !v.trim())) return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+  const safeStr = (row, i) => {
+    if (i < 0 || i >= row.length) return null;
+    const v = row[i];
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'string' && v.startsWith('#')) return null;
+    return String(v).trim() || null;
+  };
+
   return raw
     .slice(headerRowIndex + 1)
-    .filter((row) => row[descIdx] && typeof row[descIdx] === 'string' && row[descIdx].trim().startsWith('IBM'))
+    .filter((row) => {
+      const desc = safeStr(row, descIdx);
+      return desc && (safeStr(row, licPartIdx) || safeStr(row, ssPartIdx));
+    })
     .map((row, index) => {
-      const desc = String(row[descIdx] ?? '').trim();
+      const desc = safeStr(row, descIdx);
+      const deployQty = safeNum(row, deployQtyIdx);
       return {
         id: `row-${index}`,
-        ssPart: String(row[ssPartIdx] ?? '').trim(),
-        licensePart: String(row[licPartIdx] ?? '').trim(),
-        description: desc,
-        royalty: String(row[royaltyIdx] ?? '').trim(),
-        consumptionRate: Number(row[consumptionIdx]) || null,
-        price2029: Number(row[price2029Idx]) || null,
-        price2030: Number(row[price2030Idx]) || null,
-        productFamily: deriveProductFamily(desc),
-        licenseModel: deriveLicenseModel(desc),
-        category: deriveCategory(desc),
+        ssPart:           safeStr(row, ssPartIdx) ?? '',
+        licensePart:      safeStr(row, licPartIdx) ?? '',
+        description:      desc,
+        platform:         safeStr(row, platformIdx) ?? 'PA',
+        deploymentQty:    deployQty,
+        isDeployed:       deployQty !== null && deployQty > 0,
+        licenceEntitled:  safeNum(row, licEntitledIdx),
+        ssEntitled:       safeNum(row, ssEntitledIdx),
+        drawdownEntitled: safeNum(row, drawEntitledIdx),
+        discount:         safeNum(row, discountIdx),
+        ibmCost:          safeNum(row, ibmCostIdx),
+        clientPrice:      safeNum(row, clientPriceIdx),
+        extendedNetPrice: safeNum(row, extNetIdx),
+        extendedWeighted: safeNum(row, extWeightedIdx),
+        productFamily:    deriveProductFamily(desc),
+        licenseModel:     deriveLicenseModel(desc),
+        category:         deriveCategory(desc),
       };
     });
 };
 
 // ---------------------------------------------------------------------------
-// Built-in sample catalog
+// Built-in sample catalog — sourced from reference catalog.xlsx (Weighting sheet)
+// Deployed: Deployment Plan Quantity > 0  |  Available: Deployment Plan Quantity = 0
+// ibmCost   = Drawdown Price - Discounted (what IBM charges)
+// clientPrice = Drawdown Price - Weighted (what the client pays)
 // ---------------------------------------------------------------------------
 const SAMPLE_ENTRIES = [
-  { desc: 'IBM Cognos Analytics Administrator Cartridge for Authorized User License + SW Subscription and Support 12 Months', royalty: 'Yes', consumption: 19498.48, p2029: 3417.94, p2030: 3657.2, ssPart: 'E03GSZX', licPart: 'D03GTZX' },
-  { desc: 'IBM Cognos Analytics Explorer Cartridge for Authorized User License + SW Subscription and Support 12 Months', royalty: 'Yes', consumption: 3470.39, p2029: 607.42, p2030: 649.94, ssPart: 'E03H8ZX', licPart: 'D03H9ZX' },
-  { desc: 'IBM DataStage Enterprise Plus Cartridge for Virtual Processor Core License + SW Subscription and Support 12 Months', royalty: 'No', consumption: 73656.92, p2029: 12890.49, p2030: 13792.82, ssPart: 'E03JRZX', licPart: 'D03JSZX' },
-  { desc: 'IBM DataStage Enterprise Plus Cartridge for Non-Production Virtual Processor Core License + SW Subscription and Support 12 Months', royalty: 'No', consumption: 36776.79, p2029: 6444.7, p2030: 6895.83, ssPart: 'E03JZZX', licPart: 'D03K0ZX' },
-  { desc: 'IBM Security QRadar Suite Software 100 Resource Unit License + Subscription & Support 12 Months', royalty: 'Yes', consumption: 3869.54, p2029: 675.33, p2030: 722.6, ssPart: 'E0AE3ZX', licPart: 'D0AE4ZX' },
-  { desc: 'IBM Security QRadar Software Install License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 10299.84, p2029: 1815.73, p2030: 1942.83, ssPart: 'E0NBALL', licPart: 'D1RNCLL' },
-  { desc: 'IBM Security QRadar Event Capacity 2.5K Events Per Second License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 115140.14, p2029: 20017.59, p2030: 21418.82, ssPart: 'E0NBILL', licPart: 'D1RP3LL' },
-  { desc: 'IBM SPSS Statistics Standard Authorized User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 7963.04, p2029: 1393.58, p2030: 1491.13, ssPart: 'E09PILL', licPart: 'D0EKZLL' },
-  { desc: 'IBM Network Manager Managed Device License + SW Subscription and Support 12 Months', royalty: 'No', consumption: 141.49, p2029: 24.73, p2030: 26.46, ssPart: 'E0R56LL', licPart: 'D28V7LL' },
-  { desc: 'IBM ILOG CPLEX Optimizer Cluster Edition per Process License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 8865.57, p2029: 1557.12, p2030: 1666.12, ssPart: 'E0N6PLL', licPart: 'D1QZVLL' },
-  { desc: 'IBM ILOG CPLEX Optimization Studio Developer Edition Floating User Single Session License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 19053.65, p2029: 3340.25, p2030: 3574.07, ssPart: 'E0JZWLL', licPart: 'D16I8LL' },
-  { desc: 'IBM Enterprise Application Runtimes Virtual Processor Core License + Software Subscription & Support 12 Months', royalty: 'Yes', consumption: 21247.2, p2029: 3718.39, p2030: 3978.68, ssPart: 'E0ZNZZX', licPart: 'D0ZP1ZX' },
-  { desc: 'IBM DevOps Build Committer Per Floating User Single Install License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 837.33, p2029: 146.15, p2030: 156.38, ssPart: 'E0KDQLL', licPart: 'D1ABHLL' },
-  { desc: 'IBM DevOps Velocity User per Floating User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 21341.22, p2029: 3729.26, p2030: 3990.31, ssPart: 'E0PDALL', licPart: 'D1YIILL' },
-  { desc: 'IBM Rational Application Developer for WebSphere Software Floating User Single Install License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 12659.71, p2029: 2226.47, p2030: 2382.32, ssPart: 'E01MKLL', licPart: 'D54NBLL' },
-  { desc: 'IBM DevOps Code ClearCase Floating User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 7556.35, p2029: 1331.1, p2030: 1424.28, ssPart: 'E012TLL', licPart: 'D5315LL' },
-  { desc: 'IBM Rational ClearQuest Authorized User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 2960.81, p2029: 517.23, p2030: 553.44, ssPart: 'E019BLL', licPart: 'D53NSLL' },
-  { desc: 'IBM Rational Functional Tester Floating User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 17908.97, p2029: 3145.2, p2030: 3365.36, ssPart: 'E012DLL', licPart: 'D530BLL' },
-  { desc: 'IBM DevOps Test Performance Virtual Users 1000 Floating User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 109439.39, p2029: 19152.64, p2030: 20493.32, ssPart: 'E012LLL', licPart: 'D530RLL' },
-  { desc: 'IBM Rational Test Virtualization Server Processor Value Unit (PVU) License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 3194.09, p2029: 559.06, p2030: 598.19, ssPart: 'E0DU6LL', licPart: 'D0PTZLL' },
-  { desc: 'IBM Rational Test Workbench Authorized User Single Install License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 17617.15, p2029: 3083.26, p2030: 3299.09, ssPart: 'E0DTRLL', licPart: 'D0PS7LL' },
-  { desc: 'IBM UrbanCode Deploy Server Agent per Virtual Server License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 144774.81, p2029: 25225.18, p2030: 26990.94, ssPart: 'E0J1LLL', licPart: 'D12U7LL' },
-  { desc: 'IBM UrbanCode Velocity for Authorized User Single Install License + SW Subscription and Support 12 Months', royalty: 'Yes', consumption: 5141.05, p2029: 902.98, p2030: 966.19, ssPart: 'E0R1MLL', licPart: 'D28BMLL' },
-  { desc: 'IBM Engineering Requirements Management DOORS family Authorized User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 6616.13, p2029: 1152.35, p2030: 1232.01, ssPart: 'E074XLL', licPart: 'D09KNLL' },
-  { desc: 'IBM Cloud Pak for Integration Virtual Processor Core License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 24788.55, p2029: 4338.3, p2030: 4641.98, ssPart: 'E0PPBLL', licPart: 'D20ZBLL' },
-  { desc: 'IBM Sterling B2B Integrator Basic Edition for Non-Production Environment Processor Value Unit (PVU) License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 140.5, p2029: 24.67, p2030: 26.39, ssPart: 'E0J0ELL', licPart: 'D12RMLL' },
-  { desc: 'IBM Information Server Cartridge for Virtual Processor Core License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 117669.86, p2029: 20637.5, p2030: 22082.13, ssPart: 'E034QZX', licPart: 'D034RZX' },
-  { desc: 'IBM QRadar High Availability Software Install License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 8266.84, p2029: 1438.13, p2030: 1538.8, ssPart: 'E0NCHLL', licPart: 'D1RS0LL' },
-  { desc: 'IBM ILOG CPLEX Optimizer Cluster Edition per Establishment License + SW Subscription & Support 12 Months', royalty: 'No', consumption: 118082.32, p2029: 20553.83, p2030: 21992.6, ssPart: 'E0N6ZLL', licPart: 'D1R0PLL' },
-  { desc: 'IBM Rational ClearQuest Floating User License + SW Subscription & Support 12 Months', royalty: 'Yes', consumption: 8243.33, p2029: 1432.7, p2030: 1532.99, ssPart: 'E0130LL', licPart: 'D531LLL' },
+  // ── Deployed (Deployment Plan Quantity > 0) ─────────────────────────────
+  { ssPart: 'E11R5ZX', licPart: 'D11R6ZX', desc: 'IBM webMethods Hybrid Integration for IBM Z Resource Unit License + SW Subscription & Support 12 Months',                                        deployQty: 1436, platform: 'PA', ibmCost: 213.94,    clientPrice: 1404.44,     extNet: 307217.84,    extWeighted: 2016770.26 },
+  { ssPart: 'E0ZP5ZX', licPart: 'D0ZP7ZX', desc: 'IBM Enterprise Application Runtimes for IBM Z Virtual Processor Core License + Software Subscription & Support 12 Months',                     deployQty: 39,   platform: 'PA', ibmCost: 5669.92,   clientPrice: 37220.88,    extNet: 221126.75,    extWeighted: 1451614.45 },
+  { ssPart: 'E0LM2LL', licPart: 'D1GV2LL', desc: 'IBM Verify Identity Access Virtual Edition per Processor Value Unit for IBM Z License + SW Subscription & Support 12 Months',                  deployQty: 592,  platform: 'PA', ibmCost: 346.75,    clientPrice: 2276.30,     extNet: 205277.01,    extWeighted: 1347566.80 },
+  { ssPart: 'E0REPZX', licPart: 'D0RERZX', desc: 'IBM watsonx Orchestrate On-Prem for IBM Z Install LIC + SW S&S 12 Months',                                                                     deployQty: 1,    platform: 'PA', ibmCost: 164925.73, clientPrice: 1082675.73,  extNet: 164925.73,    extWeighted: 1082675.73 },
+  { ssPart: 'E0RGNZX', licPart: 'D0RGQZX', desc: 'IBM watsonx Orchestrate On-Prem for IBM Z RU 1000 Resource Unit LIC + SW S&S 12 Months',                                                       deployQty: 1,    platform: 'PA', ibmCost: 23672.63,  clientPrice: 155401.96,   extNet: 23672.63,     extWeighted: 155401.96 },
+  { ssPart: 'E0HAFZX', licPart: 'D0HANZX', desc: 'IBM watsonx.governance Operational Risk Management for IBM Z Application License + Software Subscription & Support 12Months',                   deployQty: 2,    platform: 'PA', ibmCost: 54778.66,  clientPrice: 359601.43,   extNet: 109557.32,    extWeighted: 719202.86 },
+  { ssPart: 'E0HAMZX', licPart: 'D0HAGZX', desc: 'IBM watsonx.governance Model Risk Governance for IBM Z Application License + Software Subscription & Support 12Months',                         deployQty: 2,    platform: 'PA', ibmCost: 47070.68,  clientPrice: 309001.45,   extNet: 94141.37,     extWeighted: 618002.89 },
+  { ssPart: 'E0HAUZX', licPart: 'D0HAVZX', desc: 'IBM watsonx.governance Regulatory Compliance Management for IBM Z Application License + Software Subscription & Support 12Months',              deployQty: 1,    platform: 'PA', ibmCost: 62740.44,  clientPrice: 411867.52,   extNet: 62740.44,     extWeighted: 411867.52 },
+  { ssPart: 'E14STZX', licPart: 'D14SVZX', desc: 'IBM Db2 AI Advanced Edition for Linux on IBM Z Virtual Processor Core LIC + SW S&S 12 MO',                                                     deployQty: 5,    platform: 'PA', ibmCost: 17740.64,  clientPrice: 116460.65,   extNet: 88703.18,     extWeighted: 582303.24 },
+  { ssPart: 'E10KIZX', licPart: 'D10KKZX', desc: 'IBM watsonx.data intelligence for IBM Z Resource Unit License + SW Subscription & Support 12 Months',                                           deployQty: 956,  platform: 'PA', ibmCost: 108.88,    clientPrice: 714.78,      extNet: 104093.30,    extWeighted: 683333.57 },
+  { ssPart: 'E10E1ZX', licPart: 'D10E3ZX', desc: 'IBM watsonx.data integration for IBM Z Resource Unit License + SW Subscription & Support 12 Months',                                            deployQty: 175,  platform: 'PA', ibmCost: 626.96,    clientPrice: 4115.74,     extNet: 109717.44,    extWeighted: 720253.97 },
+  { ssPart: '5655E26',  licPart: '5655E26',  desc: 'IMS HP Unload',                                                                                                                               deployQty: 22,   platform: 'z',  ibmCost: 226.91,    clientPrice: 1489.58,     extNet: 4992.03,      extWeighted: 32770.80 },
+  { ssPart: '5655E29',  licPart: '5655U09',  desc: 'IMS HP Pointer Checker V3',                                                                                                                   deployQty: 22,   platform: 'z',  ibmCost: 245.89,    clientPrice: 1614.17,     extNet: 5409.56,      extWeighted: 35511.74 },
+  { ssPart: '5655E90',  licPart: '5698AT3',  desc: 'Db2 Administration Tool 13',                                                                                                                  deployQty: 22,   platform: 'z',  ibmCost: 988.25,    clientPrice: 6487.46,     extNet: 21741.41,     extWeighted: 142724.20 },
+  // ── Available in catalog (Deployment Plan Quantity = 0) ─────────────────
+  { ssPart: 'E0KHLLL', licPart: 'D1B0JLL', desc: 'Application Optimization Module for IBM DataPower Gateway Virtual Edition Processor Value Unit License + Software Subscription & Support 12 Months', deployQty: 0, platform: 'PA', ibmCost: 42.79,     clientPrice: 280.89,      extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0PMHLL', licPart: 'D20RULL', desc: 'IBM Cloud Pak for Business Automation Virtual Processor Core License + SW Subscription & Support 12 Months',                                    deployQty: 0,    platform: 'PA', ibmCost: 10461.89,  clientPrice: 68678.40,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0QXFLL', licPart: 'D27RMLL', desc: 'IBM Cloud Pak for Data Enterprise Edition Non-Production Virtual Processor Core License + SW Subscriptn and Support 12 Months',                  deployQty: 0,    platform: 'PA', ibmCost: 4331.55,   clientPrice: 28435.03,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0PD4LL', licPart: 'D1YGZLL', desc: 'IBM Cloud Pak for Data Enterprise Edition per Virtual Processor Core License + SW Subscription & Support 12 Months',                             deployQty: 0,    platform: 'PA', ibmCost: 8663.22,   clientPrice: 56870.79,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0PPCLL', licPart: 'D20ZILL', desc: 'IBM Cloud Pak for Integration Virtual Processor Core for IBM Z License + SW Subscription & Support 12 Months',                                   deployQty: 0,    platform: 'PA', ibmCost: 13618.86,  clientPrice: 89402.71,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0PPBLL', licPart: 'D20ZBLL', desc: 'IBM Cloud Pak for Integration Virtual Processor Core License + SW Subscription & Support 12 Months',                                             deployQty: 0,    platform: 'PA', ibmCost: 11088.82,  clientPrice: 72820.39,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0REPZX', licPart: 'D0REZOX', desc: 'IBM watsonx Orchestrate On-Prem for IBM Z Small Install LIC + SW S&S 12 Months',                                                                deployQty: 0,    platform: 'PA', ibmCost: 55183.68,  clientPrice: 362223.57,   extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0HAUZX', licPart: 'D0HAWZX', desc: 'IBM watsonx.governance Financial Crimes Compliance for IBM Z Application License + Software Subscription & Support 12Months',                   deployQty: 0,    platform: 'PA', ibmCost: 54778.66,  clientPrice: 359601.43,   extNet: 0, extWeighted: 0 },
+  { ssPart: 'E14STZX', licPart: 'D14SUZZ', desc: 'IBM Db2 AI Advanced Edition for IBM Z Virtual Processor Core LIC + SW S&S 12 MO',                                                              deployQty: 0,    platform: 'z',  ibmCost: 17140.64,  clientPrice: 112560.65,   extNet: 0, extWeighted: 0 },
+  { ssPart: 'E10KIZX', licPart: 'D10KLZX', desc: 'IBM watsonx.data intelligence for IBM Z 10K Resource Unit License + SW Subscription & Support 12 Months',                                       deployQty: 0,    platform: 'PA', ibmCost: 1088.80,   clientPrice: 7147.84,     extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0ZNZZX', licPart: 'D0ZP1ZX', desc: 'IBM Enterprise Application Runtimes Virtual Processor Core License + Software Subscription & Support 12 Months',                                deployQty: 0,    platform: 'PA', ibmCost: 3718.39,   clientPrice: 24408.58,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E034QZX', licPart: 'D034RZX', desc: 'IBM Information Server Cartridge for Virtual Processor Core License + SW Subscription & Support 12 Months',                                     deployQty: 0,    platform: 'PA', ibmCost: 20637.50,  clientPrice: 135484.38,   extNet: 0, extWeighted: 0 },
+  { ssPart: 'E03JRZX', licPart: 'D03JSZX', desc: 'IBM DataStage Enterprise Plus Cartridge for Virtual Processor Core License + SW Subscription and Support 12 Months',                            deployQty: 0,    platform: 'PA', ibmCost: 12890.49,  clientPrice: 84614.42,    extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0AE3ZX', licPart: 'D0AE4ZX', desc: 'IBM Security QRadar Suite Software 100 Resource Unit License + Subscription & Support 12 Months',                                               deployQty: 0,    platform: 'PA', ibmCost: 675.33,    clientPrice: 4432.16,     extNet: 0, extWeighted: 0 },
+  { ssPart: 'E09PILL', licPart: 'D0EKZLL', desc: 'IBM SPSS Statistics Standard Authorized User License + SW Subscription & Support 12 Months',                                                    deployQty: 0,    platform: 'PA', ibmCost: 1393.58,   clientPrice: 9149.46,     extNet: 0, extWeighted: 0 },
+  { ssPart: 'E0N6PLL', licPart: 'D1QZVLL', desc: 'IBM ILOG CPLEX Optimizer Cluster Edition per Process License + SW Subscription & Support 12 Months',                                            deployQty: 0,    platform: 'PA', ibmCost: 1557.12,   clientPrice: 10220.89,    extNet: 0, extWeighted: 0 },
 ].map((e, i) => ({
   id: `sample-${i}`,
   ssPart: e.ssPart,
   licensePart: e.licPart,
   description: e.desc,
-  royalty: e.royalty,
-  consumptionRate: e.consumption,
-  price2029: e.p2029,
-  price2030: e.p2030,
+  platform: e.platform,
+  deploymentQty: e.deployQty,
+  isDeployed: e.deployQty > 0,
+  ibmCost: e.ibmCost,
+  clientPrice: e.clientPrice,
+  extendedNetPrice: e.extNet,
+  extendedWeighted: e.extWeighted,
   productFamily: deriveProductFamily(e.desc),
   licenseModel: deriveLicenseModel(e.desc),
   category: deriveCategory(e.desc),
@@ -225,12 +271,17 @@ const SAMPLE_ENTRIES = [
 // Analysis engine
 // ---------------------------------------------------------------------------
 const fmt = (n) =>
-  n == null ? '—' : `CA$${Number(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  n == null ? '—' : `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const fmtQty = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US'));
 
 const analyzeCatalog = (products) => {
   const licenseRecommendations = [];
   const useCaseRecommendations = [];
-  const priceIncreaseAlerts = [];
+
+  // Split into deployed vs available
+  const deployedProducts   = products.filter((p) => p.isDeployed);
+  const availableProducts  = products.filter((p) => !p.isDeployed);
 
   products.forEach((product) => {
     const descLower = product.description.toLowerCase();
@@ -243,9 +294,9 @@ const analyzeCatalog = (products) => {
           licenseModel: product.licenseModel,
           title: rule.title,
           insight: rule.insight,
-          consumptionRate: product.consumptionRate,
-          price2029: product.price2029,
-          price2030: product.price2030,
+          ibmCost: product.ibmCost,
+          clientPrice: product.clientPrice,
+          isDeployed: product.isDeployed,
         });
       }
     });
@@ -264,20 +315,6 @@ const analyzeCatalog = (products) => {
         });
       }
     });
-
-    if (product.price2029 && product.price2030) {
-      const pct = ((product.price2030 - product.price2029) / product.price2029) * 100;
-      if (pct > 5) {
-        priceIncreaseAlerts.push({
-          product: product.productFamily,
-          ssPart: product.ssPart,
-          description: product.description,
-          price2029: product.price2029,
-          price2030: product.price2030,
-          pctIncrease: pct,
-        });
-      }
-    }
   });
 
   const categories = [...new Set(products.map((p) => p.category).filter(Boolean))];
@@ -311,22 +348,29 @@ const analyzeCatalog = (products) => {
       };
     });
 
+  // Deployment priorities ordered by client price (highest value first)
   const deploymentPriorities = products
     .map((p) => ({
       product: p.productFamily,
+      description: p.description,
       category: p.category,
-      consumptionRate: p.consumptionRate ?? 0,
-      price2029: p.price2029 ?? 0,
+      platform: p.platform,
+      deploymentQty: p.deploymentQty,
+      isDeployed: p.isDeployed,
+      ibmCost: p.ibmCost ?? 0,
+      clientPrice: p.clientPrice ?? 0,
       licenseModel: p.licenseModel,
+      ssPart: p.ssPart,
+      licensePart: p.licensePart,
     }))
-    .sort((a, b) => b.consumptionRate - a.consumptionRate)
-    .slice(0, 10);
+    .sort((a, b) => b.clientPrice - a.clientPrice)
+    .slice(0, 20);
 
   const effortValueMatrix = useCaseRecommendations
     .slice(0, 8)
     .map((item) => {
       const priority = deploymentPriorities.find((entry) => entry.product === item.product);
-      const valueScore = Math.min(100, Math.round(((priority?.consumptionRate ?? 0) / 150000) * 100) || (item.demand === 'High' ? 70 : 45));
+      const valueScore = Math.min(100, Math.round(((priority?.clientPrice ?? 0) / 1200000) * 100) || (item.demand === 'High' ? 70 : 45));
       const effortBase = priority?.licenseModel === 'PVU / VPC' ? 75 : priority?.licenseModel === 'Authorized User' || priority?.licenseModel === 'Floating User' ? 45 : 60;
       const effortScore = Math.min(100, effortBase + (priority?.category === 'Security' || priority?.category === 'Integration' ? 10 : 0));
       const priorityBand =
@@ -340,20 +384,28 @@ const analyzeCatalog = (products) => {
       return { ...item, valueScore, effortScore, priorityBand };
     });
 
+  // Totals
+  const totalExtendedNet      = deployedProducts.reduce((s, p) => s + (p.extendedNetPrice ?? 0), 0);
+  const totalExtendedWeighted = deployedProducts.reduce((s, p) => s + (p.extendedWeighted ?? 0), 0);
+
   return {
     licenseRecommendations,
     useCaseRecommendations,
-    priceIncreaseAlerts,
     portfolioHighlights: {
       totalProducts: products.length,
+      deployedCount: deployedProducts.length,
+      availableCount: availableProducts.length,
       categories,
       licenseModelBreakdown,
-      totalConsumptionRate: products.reduce((s, p) => s + (p.consumptionRate ?? 0), 0),
+      totalExtendedNet,
+      totalExtendedWeighted,
     },
     knowledgeBase,
     executivePresentations,
     deploymentPriorities,
     effortValueMatrix,
+    deployedProducts,
+    availableProducts,
     products,
   };
 };
@@ -363,6 +415,8 @@ const analyzeCatalog = (products) => {
 // ---------------------------------------------------------------------------
 const TABS = [
   { id: 'overview',       label: 'Overview' },
+  { id: 'deployed',       label: 'Deployed' },
+  { id: 'available',      label: 'Available Catalog' },
   { id: 'presentations',  label: 'Client Presentations' },
   { id: 'deployment',     label: 'Deployment Plan' },
   { id: 'plans',          label: 'Sales & Technical Plans' },
@@ -435,7 +489,7 @@ function parseMarkdownTable(text) {
 // ---------------------------------------------------------------------------
 function App() {
   const [products, setProducts] = useState(SAMPLE_ENTRIES);
-  const [fileName, setFileName] = useState('Built-in sample (30 entries from ibm-license-catalog.xlsx)');
+  const [fileName, setFileName] = useState('Built-in sample (29 entries from reference catalog.xlsx — 14 deployed, 15 available)');
   const [parseError, setParseError] = useState(null);
   const [targetDate, setTargetDate] = useState('2025-12-31');
   const [selectedUseCaseIndex, setSelectedUseCaseIndex] = useState(0);
@@ -654,20 +708,24 @@ function App() {
             <span>Line items</span>
           </article>
           <article>
+            <strong>{analysis.portfolioHighlights.deployedCount}</strong>
+            <span>Deployed</span>
+          </article>
+          <article>
+            <strong>{analysis.portfolioHighlights.availableCount}</strong>
+            <span>Available (not deployed)</span>
+          </article>
+          <article>
             <strong>{analysis.licenseRecommendations.length}</strong>
             <span>License actions</span>
           </article>
           <article>
-            <strong>{analysis.useCaseRecommendations.length}</strong>
-            <span>Use-case ideas</span>
+            <strong>{fmt(analysis.portfolioHighlights.totalExtendedNet)}</strong>
+            <span>Total IBM cost (deployed)</span>
           </article>
           <article>
-            <strong>{analysis.priceIncreaseAlerts.length}</strong>
-            <span>Price alerts (&gt;5%)</span>
-          </article>
-          <article>
-            <strong>{fmt(analysis.portfolioHighlights.totalConsumptionRate)}</strong>
-            <span>Total consumption rate</span>
+            <strong>{fmt(analysis.portfolioHighlights.totalExtendedWeighted)}</strong>
+            <span>Total client value (deployed)</span>
           </article>
           <article>
             <strong>{topLicenseModel}</strong>
@@ -690,7 +748,93 @@ function App() {
     </div>
   );
 
-  // ── Tab 2: Client Presentations ───────────────────────────────────────────
+  // ── Tab 2: Deployed ───────────────────────────────────────────────────────
+  const renderDeployed = () => (
+    <div className="tab-content">
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Deployed products</h2>
+          <span>{analysis.deployedProducts.length} items with active deployment</span>
+        </div>
+        <p className="panel-note">Products where <strong>Deployment Plan Quantity &gt; 0</strong>. IBM cost = Drawdown Price – Discounted. Client price = Drawdown Price – Weighted.</p>
+        <div className="table-scroll">
+          <table className="priority-table">
+            <thead>
+              <tr>
+                <th>Licence Part</th>
+                <th>Description</th>
+                <th>Platform</th>
+                <th>Deploy Qty</th>
+                <th>IBM Cost (unit)</th>
+                <th>Client Price (unit)</th>
+                <th>Extended IBM Cost</th>
+                <th>Extended Client Value</th>
+                <th>License Model</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.deployedProducts.map((p, i) => (
+                <tr key={`dep-${i}`}>
+                  <td><code>{p.licensePart}</code></td>
+                  <td>{p.description}</td>
+                  <td><span className={`badge badge-platform-${(p.platform||'').toLowerCase()}`}>{p.platform}</span></td>
+                  <td>{fmtQty(p.deploymentQty)}</td>
+                  <td>{fmt(p.ibmCost)}</td>
+                  <td>{fmt(p.clientPrice)}</td>
+                  <td>{fmt(p.extendedNetPrice)}</td>
+                  <td>{fmt(p.extendedWeighted)}</td>
+                  <td>{p.licenseModel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+
+  // ── Tab 3: Available Catalog ──────────────────────────────────────────────
+  const renderAvailable = () => (
+    <div className="tab-content">
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Available catalog (not yet deployed)</h2>
+          <span>{analysis.availableProducts.length} items with no active deployment</span>
+        </div>
+        <p className="panel-note">Products where <strong>Deployment Plan Quantity = 0</strong> — entitlements owned but not yet deployed. These represent unrealised value opportunities.</p>
+        <div className="table-scroll">
+          <table className="priority-table">
+            <thead>
+              <tr>
+                <th>Licence Part</th>
+                <th>Description</th>
+                <th>Platform</th>
+                <th>IBM Cost (unit)</th>
+                <th>Client Price (unit)</th>
+                <th>License Model</th>
+                <th>Category</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.availableProducts.map((p, i) => (
+                <tr key={`avail-${i}`}>
+                  <td><code>{p.licensePart}</code></td>
+                  <td>{p.description}</td>
+                  <td><span className={`badge badge-platform-${(p.platform||'').toLowerCase()}`}>{p.platform}</span></td>
+                  <td>{fmt(p.ibmCost)}</td>
+                  <td>{fmt(p.clientPrice)}</td>
+                  <td>{p.licenseModel}</td>
+                  <td>{p.category}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+
+  // ── Tab 4: Client Presentations ───────────────────────────────────────────
   const renderPresentations = () => (
     <div className="tab-content">
       <section className="panel recommendations-panel">
@@ -858,34 +1002,44 @@ function App() {
     </div>
   );
 
-  // ── Tab 5: Licensing & Cost ───────────────────────────────────────────────
+  // ── Tab 7: Licensing & Cost ───────────────────────────────────────────────
   const renderLicensing = () => (
     <div className="tab-content">
-      {/* Product catalog table */}
+      {/* Full catalog pricing table */}
       <section className="panel">
         <div className="section-heading">
-          <h2>Product catalog</h2>
-          <span>{analysis.products.length} line items</span>
+          <h2>Full catalog — pricing overview</h2>
+          <span>{analysis.products.length} line items (top 20 by client price shown)</span>
         </div>
         <div className="table-scroll">
           <table className="priority-table">
             <thead>
               <tr>
+                <th>Licence Part</th>
                 <th>Product</th>
+                <th>Platform</th>
+                <th>Status</th>
                 <th>Category</th>
                 <th>License Model</th>
-                <th>Consumption Rate</th>
-                <th>2029 NTE</th>
+                <th>IBM Cost (unit)</th>
+                <th>Client Price (unit)</th>
               </tr>
             </thead>
             <tbody>
               {analysis.deploymentPriorities.map((item, i) => (
-                <tr key={`cat-${i}`}>
+                <tr key={`cat-${i}`} className={item.isDeployed ? 'row-deployed' : ''}>
+                  <td><code>{item.licensePart}</code></td>
                   <td>{item.product}</td>
+                  <td><span className={`badge badge-platform-${(item.platform||'').toLowerCase()}`}>{item.platform}</span></td>
+                  <td>
+                    <span className={item.isDeployed ? 'badge badge-deployed' : 'badge badge-available'}>
+                      {item.isDeployed ? `Deployed (${fmtQty(item.deploymentQty)})` : 'Available'}
+                    </span>
+                  </td>
                   <td>{item.category}</td>
                   <td>{item.licenseModel}</td>
-                  <td>{fmt(item.consumptionRate)}</td>
-                  <td>{fmt(item.price2029)}</td>
+                  <td>{fmt(item.ibmCost)}</td>
+                  <td>{fmt(item.clientPrice)}</td>
                 </tr>
               ))}
             </tbody>
@@ -907,42 +1061,15 @@ function App() {
               <div className="card-header">
                 <h3>{item.product}</h3>
                 <span className="badge">{item.licenseModel}</span>
+                {item.isDeployed && <span className="badge badge-deployed">Deployed</span>}
               </div>
               <p className="recommendation-title">{item.title}</p>
               <p>{item.insight}</p>
               <div className="price-row">
-                <span>Consumption: <strong>{fmt(item.consumptionRate)}</strong></span>
-                <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
-                <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
+                <span>IBM cost: <strong>{fmt(item.ibmCost)}</strong></span>
+                <span>Client price: <strong>{fmt(item.clientPrice)}</strong></span>
               </div>
               <small>Part: {item.ssPart}</small>
-            </article>
-          ))
-        )}
-      </section>
-
-      {/* Price increase alerts */}
-      <section className="panel recommendations-panel">
-        <div className="section-heading">
-          <h2>Price increase alerts (2029 → 2030)</h2>
-          <span>{analysis.priceIncreaseAlerts.length} items</span>
-        </div>
-        {analysis.priceIncreaseAlerts.length === 0 ? (
-          <p className="empty-state">No items with &gt;5% price increase detected.</p>
-        ) : (
-          analysis.priceIncreaseAlerts.map((item, i) => (
-            <article className="recommendation-card" key={`pa-${i}`}>
-              <div className="card-header">
-                <h3>{item.product}</h3>
-                <span className="badge badge-alert">+{item.pctIncrease.toFixed(1)}%</span>
-              </div>
-              <p className="recommendation-title">Proactive renewal or co-term opportunity</p>
-              <p>Locking in the 2029 NTE price before renewal saves {fmt(item.price2030 - item.price2029)} per unit. Engage the client before the pricing period closes.</p>
-              <div className="price-row">
-                <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
-                <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
-              </div>
-              <small>S&amp;S Part: {item.ssPart}</small>
             </article>
           ))
         )}
@@ -998,12 +1125,14 @@ function App() {
   );
 
   const tabRenderers = {
-    overview: renderOverview,
+    overview:      renderOverview,
+    deployed:      renderDeployed,
+    available:     renderAvailable,
     presentations: renderPresentations,
-    deployment: renderDeploymentPlan,
-    plans: renderPlans,
-    licensing: renderLicensing,
-    signals: renderSignals,
+    deployment:    renderDeploymentPlan,
+    plans:         renderPlans,
+    licensing:     renderLicensing,
+    signals:       renderSignals,
   };
 
   return (
