@@ -56,7 +56,7 @@ const marketSignals = [
 ];
 
 // ---------------------------------------------------------------------------
-// License modernization patterns derived from real license model vocabulary
+// License modernization patterns
 // ---------------------------------------------------------------------------
 const licenseModernizationRules = [
   {
@@ -86,7 +86,7 @@ const licenseModernizationRules = [
 ];
 
 // ---------------------------------------------------------------------------
-// Helpers: infer product family and license model from raw Description string
+// Helpers
 // ---------------------------------------------------------------------------
 const deriveProductFamily = (desc) => {
   if (!desc) return 'Unknown';
@@ -94,7 +94,6 @@ const deriveProductFamily = (desc) => {
     /^IBM\s+([\w\s\-+]+?)\s+(?:Cartridge|Authorized|Floating|Virtual|Non-Production|Processor|Resource|Managed|Software|Developer|Simultaneous|Per\s|per\s|Suite|High|Data\s|Build\s|Deploy\s|Velocity|Committer)/i,
   );
   if (m) return `IBM ${m[1].trim()}`;
-  // Fallback: first 5 words
   return desc.split(/\s+/).slice(0, 5).join(' ');
 };
 
@@ -124,7 +123,7 @@ const deriveCategory = (desc) => {
 };
 
 // ---------------------------------------------------------------------------
-// XLSX parsing: reads all rows from the first sheet that has the ACP columns
+// XLSX parsing
 // ---------------------------------------------------------------------------
 const ACP_HEADERS = [
   'S&S part number',
@@ -137,20 +136,14 @@ const ACP_HEADERS = [
 ];
 
 const parseXlsxWorkbook = (workbook) => {
-  // Try to find the ACP sheet; fall back to first sheet
   const sheetName =
     workbook.SheetNames.find((n) => /ACP/i.test(n)) ?? workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-
-  // Convert to array of arrays to find the real header row
   const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-
-  // Find the row index where ACP_HEADERS[0] appears (skip title rows)
   const headerRowIndex = raw.findIndex((row) =>
     row.some((cell) => typeof cell === 'string' && cell.trim() === ACP_HEADERS[2]),
   );
   if (headerRowIndex < 0) return [];
-
   const headers = raw[headerRowIndex].map((h) => (h ? String(h).trim() : ''));
   const descIdx = headers.findIndex((h) => h === 'Description');
   const royaltyIdx = headers.findIndex((h) => h === 'Royalty');
@@ -159,7 +152,6 @@ const parseXlsxWorkbook = (workbook) => {
   const price2030Idx = headers.findIndex((h) => /2030/i.test(h));
   const ssPartIdx = headers.findIndex((h) => /S&S part/i.test(h));
   const licPartIdx = headers.findIndex((h) => /License part/i.test(h));
-
   return raw
     .slice(headerRowIndex + 1)
     .filter((row) => row[descIdx] && typeof row[descIdx] === 'string' && row[descIdx].trim().startsWith('IBM'))
@@ -182,7 +174,7 @@ const parseXlsxWorkbook = (workbook) => {
 };
 
 // ---------------------------------------------------------------------------
-// Built-in sample catalog seeded from the real XLSX data
+// Built-in sample catalog
 // ---------------------------------------------------------------------------
 const SAMPLE_ENTRIES = [
   { desc: 'IBM Cognos Analytics Administrator Cartridge for Authorized User License + SW Subscription and Support 12 Months', royalty: 'Yes', consumption: 19498.48, p2029: 3417.94, p2030: 3657.2, ssPart: 'E03GSZX', licPart: 'D03GTZX' },
@@ -243,7 +235,6 @@ const analyzeCatalog = (products) => {
   products.forEach((product) => {
     const descLower = product.description.toLowerCase();
 
-    // License modernization
     licenseModernizationRules.forEach((rule) => {
       if (rule.models.includes(product.licenseModel)) {
         licenseRecommendations.push({
@@ -259,7 +250,6 @@ const analyzeCatalog = (products) => {
       }
     });
 
-    // Use case recommendations from market signals
     marketSignals.forEach((signal) => {
       const matched = signal.keywords.some((kw) => descLower.includes(kw));
       if (matched) {
@@ -275,7 +265,6 @@ const analyzeCatalog = (products) => {
       }
     });
 
-    // Price increase alerts: 2030 price > 2029 price by more than 5%
     if (product.price2029 && product.price2030) {
       const pct = ((product.price2030 - product.price2029) / product.price2029) * 100;
       if (pct > 5) {
@@ -297,14 +286,12 @@ const analyzeCatalog = (products) => {
     return acc;
   }, {});
 
-  // Phase 1: Knowledge base summary
   const knowledgeBase = {
     totalSolutions: products.length,
     categories,
     topMarketSignals: marketSignals.slice(0, 3).map((s) => s.theme),
   };
 
-  // Phase 2: Executive presentation - What / Why / How / Why Now
   const executivePresentations = [...new Set(products.map((p) => p.productFamily))]
     .slice(0, 5)
     .map((family) => {
@@ -324,7 +311,6 @@ const analyzeCatalog = (products) => {
       };
     });
 
-  // Phase 3: Deployment value prioritization
   const deploymentPriorities = products
     .map((p) => ({
       product: p.productFamily,
@@ -351,15 +337,8 @@ const analyzeCatalog = (products) => {
             : effortScore <= 50
               ? 'priority-3'
               : 'priority-4';
-
-      return {
-        ...item,
-        valueScore,
-        effortScore,
-        priorityBand,
-      };
+      return { ...item, valueScore, effortScore, priorityBand };
     });
-
 
   return {
     licenseRecommendations,
@@ -375,6 +354,7 @@ const analyzeCatalog = (products) => {
     executivePresentations,
     deploymentPriorities,
     effortValueMatrix,
+    products,
   };
 };
 
@@ -391,7 +371,6 @@ const generateWorkbackPlan = (targetDate, selectedUseCase) => {
   if (!selectedUseCase) {
     return [{ week: 0, activity: 'Select a suggested use case to generate a tailored workback plan', owner: 'User', focus: 'Use-case selection', targetDate: '—', dependencies: 'None' }];
   }
-
   if (weeksToTarget < 12) {
     return [{ week: 0, activity: 'Insufficient lead time', owner: 'N/A', focus: 'Timeline risk', targetDate: '—', dependencies: 'Adjust deadline or reduce scope' }];
   }
@@ -401,14 +380,7 @@ const generateWorkbackPlan = (targetDate, selectedUseCase) => {
   const row = (weekOffset, activity, owner, focus, dependencies) => {
     const date = new Date(target);
     date.setDate(date.getDate() - (weeksToTarget - weekOffset) * 7);
-    return {
-      week: weekOffset,
-      activity,
-      owner,
-      focus,
-      targetDate: formatDate(date),
-      dependencies,
-    };
+    return { week: weekOffset, activity, owner, focus, targetDate: formatDate(date), dependencies };
   };
 
   return [
@@ -429,6 +401,18 @@ const generateWorkbackPlan = (targetDate, selectedUseCase) => {
 };
 
 // ---------------------------------------------------------------------------
+// Tab definitions
+// ---------------------------------------------------------------------------
+const TABS = [
+  { id: 'overview',       label: 'Overview' },
+  { id: 'presentations',  label: 'Client Presentations' },
+  { id: 'deployment',     label: 'Deployment Plan' },
+  { id: 'plans',          label: 'Sales & Technical Plans' },
+  { id: 'licensing',      label: 'Licensing & Cost' },
+  { id: 'signals',        label: 'Market Signals' },
+];
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 function App() {
@@ -437,21 +421,22 @@ function App() {
   const [parseError, setParseError] = useState(null);
   const [targetDate, setTargetDate] = useState('2025-12-31');
   const [selectedUseCaseIndex, setSelectedUseCaseIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const analysis = useMemo(() => analyzeCatalog(products), [products]);
   const selectedUseCase = analysis.useCaseRecommendations[selectedUseCaseIndex] ?? null;
   const selectedProductPriority =
     analysis.deploymentPriorities.find((item) => item.product === selectedUseCase?.product) ?? null;
+
   const salesPlan = useMemo(() => {
     if (!selectedUseCase) {
       return {
-        priorityOpportunity: 'Select a use case',
+        priorityOpportunity: 'Select a use case in the Deployment Plan tab',
         renewalImpact: 'Select a use case to assess renewal and revenue impact.',
         executiveStrategy: 'Use the selected use case to shape the executive conversation.',
         expectedOutcome: 'No use case selected.',
       };
     }
-
     return {
       priorityOpportunity: `${selectedUseCase.product} — ${selectedUseCase.title}`,
       renewalImpact: `${selectedUseCase.product} supports ${selectedUseCase.title.toLowerCase()} and should be positioned before renewal events to improve realized value and reduce exposure to future price uplift.`,
@@ -459,16 +444,16 @@ function App() {
       expectedOutcome: `Increase deployment adoption of ${selectedUseCase.product} and convert owned entitlement into measurable business value.`,
     };
   }, [selectedUseCase]);
+
   const technicalPlan = useMemo(() => {
     if (!selectedUseCase) {
       return {
-        deploymentSequence: ['Select a use case to generate a technical plan'],
+        deploymentSequence: ['Select a use case in the Deployment Plan tab to generate a technical plan'],
         prerequisites: 'No use case selected.',
         risks: 'No use case selected.',
         architecture: 'No use case selected.',
       };
     }
-
     return {
       deploymentSequence: [
         `1. Validate target architecture for ${selectedUseCase.product}`,
@@ -482,10 +467,15 @@ function App() {
         : `Reference architecture should be defined for ${selectedUseCase.product}.`,
     };
   }, [selectedUseCase, selectedProductPriority]);
+
   const workbackPlan = useMemo(
     () => generateWorkbackPlan(targetDate, selectedUseCase),
     [targetDate, selectedUseCase],
   );
+
+  const topLicenseModel = Object.entries(analysis.portfolioHighlights.licenseModelBreakdown).sort(
+    (a, b) => b[1] - a[1],
+  )[0]?.[0] ?? '—';
 
   const onFileUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -496,9 +486,7 @@ function App() {
       const workbook = XLSX.read(buffer, { type: 'array' });
       const parsed = parseXlsxWorkbook(workbook);
       if (parsed.length === 0) {
-        setParseError(
-          'No IBM product rows were found. Make sure the file has a "Description" column with rows starting with "IBM".',
-        );
+        setParseError('No IBM product rows were found. Make sure the file has a "Description" column with rows starting with "IBM".');
         return;
       }
       setProducts(parsed);
@@ -508,87 +496,156 @@ function App() {
     }
   };
 
-  const topLicenseModel = Object.entries(analysis.portfolioHighlights.licenseModelBreakdown).sort(
-    (a, b) => b[1] - a[1],
-  )[0]?.[0] ?? '—';
-
-  return (
-    <div className="app-shell">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">IBM Software Portfolio Advisor — Powered by watsonx</p>
-          <h1>Client-specific account planning and deployment acceleration</h1>
-          <p className="hero-copy">
-            Upload <strong>ibm-license-catalog.xlsx</strong> (or any IBM ACP catalog XLSX) to generate client knowledge base, executive presentations, deployment value analysis, sales &amp; technical plans, and workback timelines — all aligned to IBM's account planning methodology.
-          </p>
-          <p className="file-badge">{fileName}</p>
-        </div>
-        <div className="hero-card">
-          <h2>Upload catalog XLSX</h2>
-          <p>Expects the IBM ACP format with columns: Description, S&amp;S part number, License part number, Royalty, Consumption rate, NTE prices for 2029 and 2030.</p>
+  // ── Persistent header ────────────────────────────────────────────────────
+  const renderHeader = () => (
+    <header className="persistent-header">
+      <div className="header-brand">
+        <p className="eyebrow">IBM Software Portfolio Advisor — Powered by watsonx</p>
+        <h1>Client-specific account planning &amp; deployment acceleration</h1>
+      </div>
+      <div className="header-controls">
+        <div className="header-upload">
           <label className="upload-button">
-            Choose XLSX file
+            Upload catalog XLSX
             <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onFileUpload} />
           </label>
+          <p className="file-badge">{fileName}</p>
           {parseError && <p className="parse-error">{parseError}</p>}
-          <div className="target-date-input">
-            <label>Target deployment date</label>
-            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
-          </div>
         </div>
-      </header>
+        <div className="target-date-input">
+          <label>Target deployment date</label>
+          <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+        </div>
+      </div>
+    </header>
+  );
 
-      <main className="layout">
-        {/* Phase 1: Knowledge base summary */}
-        <section className="panel summary-panel full-width phase-section">
-          <div className="section-heading">
-            <h2>Phase 1: Client-specific knowledge base</h2>
-          </div>
-          <p>Total solutions in catalog: <strong>{analysis.knowledgeBase.totalSolutions}</strong></p>
-          <p>Solution categories: <strong>{analysis.knowledgeBase.categories.join(', ')}</strong></p>
-          <p>Top market signals: <strong>{analysis.knowledgeBase.topMarketSignals.join(', ')}</strong></p>
-        </section>
+  // ── Tab navigation ────────────────────────────────────────────────────────
+  const renderTabs = () => (
+    <nav className="tab-nav" role="tablist">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          className={`tab-btn${activeTab === tab.id ? ' tab-btn-active' : ''}`}
+          onClick={() => setActiveTab(tab.id)}
+          type="button"
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
 
-        {/* Phase 2: Executive presentations */}
-        <section className="panel recommendations-panel full-width phase-section">
-          <div className="section-heading">
-            <h2>Phase 2: Executive client presentations (What / Why / How / Why Now)</h2>
-            <span>{analysis.executivePresentations.length} products</span>
-          </div>
-          {analysis.executivePresentations.map((item, i) => (
-            <article className="recommendation-card" key={`exec-${i}`}>
-              <h3>{item.product}</h3>
-              <p><strong>What:</strong> {item.what}</p>
-              <p><strong>Why:</strong> {item.why}</p>
-              <p><strong>How:</strong> {item.how}</p>
-              <p><strong>Why Now:</strong> {item.whyNow}</p>
-            </article>
+  // ── Tab 1: Overview ───────────────────────────────────────────────────────
+  const renderOverview = () => (
+    <div className="tab-content">
+      {/* Phase 1: Knowledge base */}
+      <section className="panel phase-section">
+        <div className="section-heading">
+          <h2>Phase 1: Client-specific knowledge base</h2>
+        </div>
+        <p>Total solutions in catalog: <strong>{analysis.knowledgeBase.totalSolutions}</strong></p>
+        <p>Solution categories: <strong>{analysis.knowledgeBase.categories.join(', ')}</strong></p>
+        <p>Top market signals: <strong>{analysis.knowledgeBase.topMarketSignals.join(', ')}</strong></p>
+      </section>
+
+      {/* Portfolio snapshot */}
+      <section className="panel summary-panel">
+        <div className="section-heading">
+          <h2>Portfolio snapshot</h2>
+        </div>
+        <div className="stats-grid">
+          <article>
+            <strong>{analysis.portfolioHighlights.totalProducts}</strong>
+            <span>Line items</span>
+          </article>
+          <article>
+            <strong>{analysis.licenseRecommendations.length}</strong>
+            <span>License actions</span>
+          </article>
+          <article>
+            <strong>{analysis.useCaseRecommendations.length}</strong>
+            <span>Use-case ideas</span>
+          </article>
+          <article>
+            <strong>{analysis.priceIncreaseAlerts.length}</strong>
+            <span>Price alerts (&gt;5%)</span>
+          </article>
+          <article>
+            <strong>{fmt(analysis.portfolioHighlights.totalConsumptionRate)}</strong>
+            <span>Total consumption rate</span>
+          </article>
+          <article>
+            <strong>{topLicenseModel}</strong>
+            <span>Most common license</span>
+          </article>
+        </div>
+        <div className="chips">
+          {analysis.portfolioHighlights.categories.map((c) => (
+            <span key={c} className="chip">{c}</span>
           ))}
-        </section>
-
-        {/* Phase 3: Workback plan */}
-        <section className="panel recommendations-panel full-width phase-section">
-          <div className="section-heading">
-            <h2>Phase 3: Workback plan to target deployment ({targetDate})</h2>
-            <span>{workbackPlan.length} milestones</span>
-          </div>
-          <div className="section-heading">
-            <h3>Selected use case</h3>
-            <span>{selectedUseCase ? `${selectedUseCase.product} — ${selectedUseCase.title}` : 'None selected'}</span>
-          </div>
-          <div className="use-case-selector">
-            {analysis.useCaseRecommendations.slice(0, 5).map((item, index) => (
-              <button
-                type="button"
-                key={`selector-${item.product}-${index}`}
-                className={`use-case-option${selectedUseCaseIndex === index ? ' use-case-option-active' : ''}`}
-                onClick={() => setSelectedUseCaseIndex(index)}
-              >
-                <strong>{item.product}</strong>
-                <span>{item.title}</span>
-              </button>
+        </div>
+        <div className="chips">
+          {Object.entries(analysis.portfolioHighlights.licenseModelBreakdown)
+            .sort((a, b) => b[1] - a[1])
+            .map(([model, count]) => (
+              <span key={model} className="chip chip-secondary">{model} ({count})</span>
             ))}
-          </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  // ── Tab 2: Client Presentations ───────────────────────────────────────────
+  const renderPresentations = () => (
+    <div className="tab-content">
+      <section className="panel recommendations-panel">
+        <div className="section-heading">
+          <h2>Executive client presentations (What / Why / How / Why Now)</h2>
+          <span>{analysis.executivePresentations.length} products</span>
+        </div>
+        {analysis.executivePresentations.map((item, i) => (
+          <article className="recommendation-card" key={`exec-${i}`}>
+            <h3 className="recommendation-title">{item.product}</h3>
+            <p><strong>What:</strong> {item.what}</p>
+            <p><strong>Why:</strong> {item.why}</p>
+            <p><strong>How:</strong> {item.how}</p>
+            <p><strong>Why Now:</strong> {item.whyNow}</p>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+
+  // ── Tab 3: Deployment Plan ────────────────────────────────────────────────
+  const renderDeploymentPlan = () => (
+    <div className="tab-content">
+      {/* Phase 3: Workback plan */}
+      <section className="panel phase-section">
+        <div className="section-heading">
+          <h2>Phase 3: Workback plan to target deployment ({targetDate})</h2>
+          <span>{workbackPlan.length} milestones</span>
+        </div>
+        <div className="section-heading">
+          <h3>Selected use case</h3>
+          <span>{selectedUseCase ? `${selectedUseCase.product} — ${selectedUseCase.title}` : 'None selected'}</span>
+        </div>
+        <div className="use-case-selector">
+          {analysis.useCaseRecommendations.slice(0, 5).map((item, index) => (
+            <button
+              type="button"
+              key={`selector-${item.product}-${index}`}
+              className={`use-case-option${selectedUseCaseIndex === index ? ' use-case-option-active' : ''}`}
+              onClick={() => setSelectedUseCaseIndex(index)}
+            >
+              <strong>{item.product}</strong>
+              <span>{item.title}</span>
+            </button>
+          ))}
+        </div>
+        <div className="table-scroll">
           <table className="priority-table">
             <thead>
               <tr>
@@ -613,33 +670,75 @@ function App() {
               ))}
             </tbody>
           </table>
-        </section>
+        </div>
+      </section>
 
-        {/* Phase 4: Deployment value prioritization */}
-        <section className="panel recommendations-panel full-width phase-section">
-          <div className="section-heading">
-            <h2>Phase 4: Deployment value prioritization</h2>
-            <span>Top {analysis.deploymentPriorities.length} by consumption rate</span>
-          </div>
-          <div className="matrix-legend">
-            <span className="matrix-chip matrix-chip-priority-1">Priority 1: high value / low effort</span>
-            <span className="matrix-chip matrix-chip-priority-2">Priority 2: high value / higher effort</span>
-            <span className="matrix-chip matrix-chip-priority-3">Priority 3: moderate value / low effort</span>
-            <span className="matrix-chip matrix-chip-priority-4">Priority 4: lower priority</span>
-          </div>
-          <div className="matrix-grid">
-            {analysis.effortValueMatrix.map((item, index) => (
-              <article
-                key={`matrix-${item.product}-${index}`}
-                className={`matrix-card ${item.priorityBand}${selectedUseCase?.product === item.product && selectedUseCase?.title === item.title ? ' matrix-card-selected' : ''}`}
-              >
-                <h3>{item.product}</h3>
-                <p>{item.title}</p>
-                <p><strong>Value:</strong> {item.valueScore}/100</p>
-                <p><strong>Effort:</strong> {item.effortScore}/100</p>
-              </article>
-            ))}
-          </div>
+      {/* Phase 4: Value prioritization */}
+      <section className="panel phase-section">
+        <div className="section-heading">
+          <h2>Phase 4: Deployment value prioritization</h2>
+          <span>Top {analysis.deploymentPriorities.length} by consumption rate</span>
+        </div>
+        <div className="matrix-legend">
+          <span className="matrix-chip matrix-chip-priority-1">Priority 1: high value / low effort</span>
+          <span className="matrix-chip matrix-chip-priority-2">Priority 2: high value / higher effort</span>
+          <span className="matrix-chip matrix-chip-priority-3">Priority 3: moderate value / low effort</span>
+          <span className="matrix-chip matrix-chip-priority-4">Priority 4: lower priority</span>
+        </div>
+        <div className="matrix-grid">
+          {analysis.effortValueMatrix.map((item, index) => (
+            <article
+              key={`matrix-${item.product}-${index}`}
+              className={`matrix-card ${item.priorityBand}${selectedUseCase?.product === item.product && selectedUseCase?.title === item.title ? ' matrix-card-selected' : ''}`}
+            >
+              <h3>{item.product}</h3>
+              <p>{item.title}</p>
+              <p><strong>Value:</strong> {item.valueScore}/100</p>
+              <p><strong>Effort:</strong> {item.effortScore}/100</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+
+  // ── Tab 4: Sales & Technical Plans ───────────────────────────────────────
+  const renderPlans = () => (
+    <div className="tab-content tab-content-split">
+      <section className="panel recommendations-panel phase-section">
+        <div className="section-heading">
+          <h2>Phase 5a: Business plan for technology sales leaders</h2>
+        </div>
+        <p><strong>Priority opportunity:</strong> {salesPlan.priorityOpportunity}</p>
+        <p><strong>Expected outcome:</strong> {salesPlan.expectedOutcome}</p>
+        <p><strong>Renewal impact:</strong> {salesPlan.renewalImpact}</p>
+        <p><strong>Executive strategy:</strong> {salesPlan.executiveStrategy}</p>
+      </section>
+      <section className="panel recommendations-panel phase-section">
+        <div className="section-heading">
+          <h2>Phase 5b: Technical plan for ATLs and CSEs</h2>
+        </div>
+        <p><strong>Recommended deployment sequence:</strong></p>
+        <ul>
+          {technicalPlan.deploymentSequence.map((s, i) => <li key={i}>{s}</li>)}
+        </ul>
+        <p><strong>Architecture considerations:</strong> {technicalPlan.architecture}</p>
+        <p><strong>Prerequisites:</strong> {technicalPlan.prerequisites}</p>
+        <p><strong>Risks:</strong> {technicalPlan.risks}</p>
+      </section>
+    </div>
+  );
+
+  // ── Tab 5: Licensing & Cost ───────────────────────────────────────────────
+  const renderLicensing = () => (
+    <div className="tab-content">
+      {/* Product catalog table */}
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Product catalog</h2>
+          <span>{analysis.products.length} line items</span>
+        </div>
+        <div className="table-scroll">
           <table className="priority-table">
             <thead>
               <tr>
@@ -652,7 +751,7 @@ function App() {
             </thead>
             <tbody>
               {analysis.deploymentPriorities.map((item, i) => (
-                <tr key={`pri-${i}`}>
+                <tr key={`cat-${i}`}>
                   <td>{item.product}</td>
                   <td>{item.category}</td>
                   <td>{item.licenseModel}</td>
@@ -662,175 +761,128 @@ function App() {
               ))}
             </tbody>
           </table>
-        </section>
+        </div>
+      </section>
 
-        {/* Phase 5: Sales & technical plans */}
-        <section className="panel recommendations-panel phase-section">
-          <div className="section-heading">
-            <h2>Phase 5a: Business plan for technology sales leaders</h2>
-          </div>
-          <p><strong>Priority opportunity:</strong> {salesPlan.priorityOpportunity}</p>
-          <p><strong>Expected outcome:</strong> {salesPlan.expectedOutcome}</p>
-          <p><strong>Renewal impact:</strong> {salesPlan.renewalImpact}</p>
-          <p><strong>Executive strategy:</strong> {salesPlan.executiveStrategy}</p>
-        </section>
-
-        <section className="panel recommendations-panel phase-section">
-          <div className="section-heading">
-            <h2>Phase 5b: Technical plan for ATLs and CSEs</h2>
-          </div>
-          <p><strong>Recommended deployment sequence:</strong></p>
-          <ul>
-            {technicalPlan.deploymentSequence.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
-          <p><strong>Architecture considerations:</strong> {technicalPlan.architecture}</p>
-          <p><strong>Prerequisites:</strong> {technicalPlan.prerequisites}</p>
-          <p><strong>Risks:</strong> {technicalPlan.risks}</p>
-        </section>
-
-        {/* Original analysis sections collapsed below */}
-        <section className="panel summary-panel full-width">
-          <div className="section-heading">
-            <h2>Portfolio snapshot</h2>
-          </div>
-          <div className="stats-grid">
-            <article>
-              <strong>{analysis.portfolioHighlights.totalProducts}</strong>
-              <span>Line items</span>
+      {/* License modernization */}
+      <section className="panel recommendations-panel">
+        <div className="section-heading">
+          <h2>License modernization</h2>
+          <span>{analysis.licenseRecommendations.length} recommendations</span>
+        </div>
+        {analysis.licenseRecommendations.length === 0 ? (
+          <p className="empty-state">No license modernization patterns detected.</p>
+        ) : (
+          analysis.licenseRecommendations.map((item, i) => (
+            <article className="recommendation-card" key={`lic-${i}`}>
+              <div className="card-header">
+                <h3>{item.product}</h3>
+                <span className="badge">{item.licenseModel}</span>
+              </div>
+              <p className="recommendation-title">{item.title}</p>
+              <p>{item.insight}</p>
+              <div className="price-row">
+                <span>Consumption: <strong>{fmt(item.consumptionRate)}</strong></span>
+                <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
+                <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
+              </div>
+              <small>Part: {item.ssPart}</small>
             </article>
-            <article>
-              <strong>{analysis.licenseRecommendations.length}</strong>
-              <span>License actions</span>
-            </article>
-            <article>
-              <strong>{analysis.useCaseRecommendations.length}</strong>
-              <span>Use-case ideas</span>
-            </article>
-            <article>
-              <strong>{analysis.priceIncreaseAlerts.length}</strong>
-              <span>Price alerts (&gt;5%)</span>
-            </article>
-            <article>
-              <strong>{fmt(analysis.portfolioHighlights.totalConsumptionRate)}</strong>
-              <span>Total consumption rate</span>
-            </article>
-            <article>
-              <strong>{topLicenseModel}</strong>
-              <span>Most common license</span>
-            </article>
-          </div>
-          <div className="chips">
-            {analysis.portfolioHighlights.categories.map((c) => (
-              <span key={c} className="chip">{c}</span>
-            ))}
-          </div>
-          <div className="chips">
-            {Object.entries(analysis.portfolioHighlights.licenseModelBreakdown)
-              .sort((a, b) => b[1] - a[1])
-              .map(([model, count]) => (
-                <span key={model} className="chip chip-secondary">{model} ({count})</span>
-              ))}
-          </div>
-        </section>
+          ))
+        )}
+      </section>
 
-        {/* License modernization */}
-        <section className="panel recommendations-panel">
-          <div className="section-heading">
-            <h2>License modernization</h2>
-            <span>{analysis.licenseRecommendations.length} recommendations</span>
-          </div>
-          {analysis.licenseRecommendations.length === 0 ? (
-            <p className="empty-state">No license modernization patterns detected.</p>
-          ) : (
-            analysis.licenseRecommendations.slice(0, 5).map((item, i) => (
-              <article className="recommendation-card" key={`lic-${i}`}>
-                <div className="card-header">
-                  <h3>{item.product}</h3>
-                  <span className="badge">{item.licenseModel}</span>
-                </div>
-                <p className="recommendation-title">{item.title}</p>
-                <p>{item.insight}</p>
-                <div className="price-row">
-                  <span>Consumption: <strong>{fmt(item.consumptionRate)}</strong></span>
-                  <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
-                  <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
-                </div>
-                <small>Part: {item.ssPart}</small>
-              </article>
-            ))
-          )}
-        </section>
+      {/* Price increase alerts */}
+      <section className="panel recommendations-panel">
+        <div className="section-heading">
+          <h2>Price increase alerts (2029 → 2030)</h2>
+          <span>{analysis.priceIncreaseAlerts.length} items</span>
+        </div>
+        {analysis.priceIncreaseAlerts.length === 0 ? (
+          <p className="empty-state">No items with &gt;5% price increase detected.</p>
+        ) : (
+          analysis.priceIncreaseAlerts.map((item, i) => (
+            <article className="recommendation-card" key={`pa-${i}`}>
+              <div className="card-header">
+                <h3>{item.product}</h3>
+                <span className="badge badge-alert">+{item.pctIncrease.toFixed(1)}%</span>
+              </div>
+              <p className="recommendation-title">Proactive renewal or co-term opportunity</p>
+              <p>Locking in the 2029 NTE price before renewal saves {fmt(item.price2030 - item.price2029)} per unit. Engage the client before the pricing period closes.</p>
+              <div className="price-row">
+                <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
+                <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
+              </div>
+              <small>S&amp;S Part: {item.ssPart}</small>
+            </article>
+          ))
+        )}
+      </section>
+    </div>
+  );
 
-        {/* Use case recommendations */}
-        <section className="panel recommendations-panel">
-          <div className="section-heading">
-            <h2>New use cases from market signals</h2>
-            <span>{analysis.useCaseRecommendations.length} ideas</span>
-          </div>
-          {analysis.useCaseRecommendations.length === 0 ? (
-            <p className="empty-state">No market-aligned use cases matched.</p>
-          ) : (
-            analysis.useCaseRecommendations.slice(0, 5).map((item, i) => (
-              <article className="recommendation-card" key={`uc-${i}`}>
-                <div className="card-header">
-                  <h3>{item.product}</h3>
-                  <span className={`badge badge-demand-${item.demand.toLowerCase()}`}>{item.demand} demand</span>
-                </div>
-                <p className="recommendation-title">{item.title}</p>
-                <p>{item.insight}</p>
-                <small>{item.rationale}</small>
-                <ul>
-                  {item.drivers.map((d) => <li key={d}>{d}</li>)}
-                </ul>
-              </article>
-            ))
-          )}
-        </section>
+  // ── Tab 6: Market Signals ─────────────────────────────────────────────────
+  const renderSignals = () => (
+    <div className="tab-content tab-content-split">
+      <section className="panel recommendations-panel">
+        <div className="section-heading">
+          <h2>New use cases from market signals</h2>
+          <span>{analysis.useCaseRecommendations.length} ideas</span>
+        </div>
+        {analysis.useCaseRecommendations.length === 0 ? (
+          <p className="empty-state">No market-aligned use cases matched.</p>
+        ) : (
+          analysis.useCaseRecommendations.map((item, i) => (
+            <article className="recommendation-card" key={`uc-${i}`}>
+              <div className="card-header">
+                <h3>{item.product}</h3>
+                <span className={`badge badge-demand-${item.demand.toLowerCase()}`}>{item.demand} demand</span>
+              </div>
+              <p className="recommendation-title">{item.title}</p>
+              <p>{item.insight}</p>
+              <small>{item.rationale}</small>
+              <ul>
+                {item.drivers.map((d) => <li key={d}>{d}</li>)}
+              </ul>
+            </article>
+          ))
+        )}
+      </section>
 
-        {/* Price increase alerts */}
-        <section className="panel recommendations-panel">
-          <div className="section-heading">
-            <h2>Price increase alerts (2029 → 2030)</h2>
-            <span>{analysis.priceIncreaseAlerts.length} items</span>
-          </div>
-          {analysis.priceIncreaseAlerts.length === 0 ? (
-            <p className="empty-state">No items with &gt;5% price increase detected.</p>
-          ) : (
-            analysis.priceIncreaseAlerts.slice(0, 5).map((item, i) => (
-              <article className="recommendation-card" key={`pa-${i}`}>
-                <div className="card-header">
-                  <h3>{item.product}</h3>
-                  <span className="badge badge-alert">+{item.pctIncrease.toFixed(1)}%</span>
-                </div>
-                <p className="recommendation-title">Proactive renewal or co-term opportunity</p>
-                <p>Locking in the 2029 NTE price before renewal saves {fmt(item.price2030 - item.price2029)} per unit. Engage the client before the pricing period closes.</p>
-                <div className="price-row">
-                  <span>2029 NTE: <strong>{fmt(item.price2029)}</strong></span>
-                  <span>2030 NTE: <strong>{fmt(item.price2030)}</strong></span>
-                </div>
-                <small>S&amp;S Part: {item.ssPart}</small>
-              </article>
-            ))
-          )}
-        </section>
+      <section className="panel trends-panel">
+        <div className="section-heading">
+          <h2>Market trend watchlist</h2>
+        </div>
+        <div className="trend-list">
+          {marketSignals.map((signal) => (
+            <article className="trend-card" key={signal.theme}>
+              <div className="trend-header">
+                <h3>{signal.theme}</h3>
+                <span>{signal.demand} demand</span>
+              </div>
+              <p>{signal.summary}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 
-        {/* Market trend watchlist */}
-        <section className="panel trends-panel">
-          <div className="section-heading">
-            <h2>Market trend watchlist</h2>
-          </div>
-          <div className="trend-list">
-            {marketSignals.map((signal) => (
-              <article className="trend-card" key={signal.theme}>
-                <div className="trend-header">
-                  <h3>{signal.theme}</h3>
-                  <span>{signal.demand} demand</span>
-                </div>
-                <p>{signal.summary}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+  const tabRenderers = {
+    overview: renderOverview,
+    presentations: renderPresentations,
+    deployment: renderDeploymentPlan,
+    plans: renderPlans,
+    licensing: renderLicensing,
+    signals: renderSignals,
+  };
+
+  return (
+    <div className="app-shell">
+      {renderHeader()}
+      {renderTabs()}
+      <main>
+        {tabRenderers[activeTab]?.()}
       </main>
     </div>
   );

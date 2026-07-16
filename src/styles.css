@@ -36,26 +36,21 @@ textarea {
   padding: 32px 0 48px;
 }
 
-.hero {
+/* ── Persistent header ─────────────────────────────────────────────────────── */
+.persistent-header {
   display: grid;
   grid-template-columns: 1.7fr 1fr;
   gap: 24px;
+  align-items: start;
   margin-bottom: 24px;
-}
-
-.hero,
-.panel {
+  padding: 28px 32px;
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 24px;
   backdrop-filter: blur(18px);
 }
 
-.hero {
-  padding: 32px;
-}
-
-.eyebrow {
+.header-brand .eyebrow {
   margin: 0 0 12px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -63,37 +58,88 @@ textarea {
   color: #60a5fa;
 }
 
-.hero h1 {
+.header-brand h1 {
   margin: 0;
-  font-size: clamp(2rem, 3vw, 3.4rem);
-  line-height: 1.08;
+  font-size: clamp(1.6rem, 2.4vw, 2.8rem);
+  line-height: 1.1;
 }
 
-.hero-copy {
-  max-width: 60ch;
-  color: #cbd5e1;
+.header-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.hero-card {
-  padding: 24px;
+.header-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Tab navigation ────────────────────────────────────────────────────────── */
+.tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 24px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 18px;
-  background: rgba(15, 118, 110, 0.18);
-  border: 1px solid rgba(45, 212, 191, 0.25);
-  align-self: start;
+  backdrop-filter: blur(12px);
 }
 
-.hero-card h2,
-.section-heading h2,
-.recommendation-card h3,
-.trend-card h3 {
-  margin-top: 0;
+.tab-btn {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  background: rgba(37, 99, 235, 0.12);
+  color: #e2e8f0;
+}
+
+.tab-btn-active {
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #bfdbfe;
+  font-weight: 600;
+}
+
+/* ── Tab content areas ─────────────────────────────────────────────────────── */
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.tab-content-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* ── Panels ────────────────────────────────────────────────────────────────── */
+.panel {
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 24px;
+  backdrop-filter: blur(18px);
 }
 
 .upload-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: 12px;
   padding: 12px 16px;
   border-radius: 999px;
   background: #2563eb;
@@ -104,16 +150,6 @@ textarea {
 
 .upload-button input {
   display: none;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-}
-
-.panel {
-  padding: 24px;
 }
 
 .input-panel {
@@ -222,8 +258,9 @@ textarea {
 
 .file-badge,
 .parse-error {
-  margin: 12px 0 0;
+  margin: 0;
   color: #cbd5e1;
+  font-size: 0.88rem;
 }
 
 .parse-error {
@@ -233,7 +270,6 @@ textarea {
 .target-date-input {
   display: grid;
   gap: 8px;
-  margin-top: 16px;
 }
 
 .target-date-input input {
@@ -296,7 +332,7 @@ textarea {
 .recommendation-card p,
 .recommendation-card small,
 .trend-card p,
-.hero-card p {
+.persistent-header p {
   color: #cbd5e1;
 }
 
@@ -410,6 +446,11 @@ textarea {
   background: rgba(37, 99, 235, 0.16);
 }
 
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+}
+
 .priority-table {
   width: 100%;
   border-collapse: collapse;
@@ -447,15 +488,14 @@ textarea {
   white-space: nowrap;
 }
 
+/* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
-  .hero,
-  .layout {
+  .persistent-header {
     grid-template-columns: 1fr;
   }
 
-  .input-panel,
-  .full-width {
-    grid-column: auto;
+  .tab-content-split {
+    grid-template-columns: 1fr;
   }
 
   .stats-grid {
@@ -469,14 +509,13 @@ textarea {
     padding-top: 20px;
   }
 
-  .hero,
+  .persistent-header,
   .panel {
     border-radius: 20px;
   }
 
-  .hero,
-  .panel,
-  .hero-card {
+  .persistent-header,
+  .panel {
     padding: 18px;
   }
 
@@ -488,5 +527,15 @@ textarea {
   .trend-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .tab-nav {
+    border-radius: 14px;
+    gap: 4px;
+  }
+
+  .tab-btn {
+    padding: 8px 12px;
+    font-size: 0.82rem;
   }
 }
